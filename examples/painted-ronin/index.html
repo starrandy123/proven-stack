@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Painted Ronin</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{
+ "imports": {
+  "fastnoise-lite": "./vendor/fastnoise/FastNoiseLite.js",
+  "howler": "./vendor/howler/howler.min.js",
+  "jolt-physics": "./vendor/jolt/jolt-physics.wasm-compat.js",
+  "postprocessing": "./vendor/postprocessing/index.js",
+  "three.quarks": "./vendor/quarks/three.quarks.esm.js",
+  "quarks.core": "./vendor/quarks/quarks.core.esm.js",
+  "@recast-navigation/core": "./vendor/recast/core/index.mjs",
+  "@recast-navigation/generators": "./vendor/recast/generators/index.mjs",
+  "@recast-navigation/three": "./vendor/recast/three/index.mjs",
+  "@recast-navigation/wasm": "./vendor/recast/wasm/recast-navigation.wasm-compat.js",
+  "three": "./vendor/three/three.module.js",
+  "three/addons/": "./vendor/three/addons/",
+  "three/examples/jsm/": "./vendor/three/addons/",
+  "zzfx": "./vendor/zzfx/ZzFX.js"
+ }
+}</script>
+</head>
+<body>
+<div id="game"></div>
+<div id="loading"><div class="brush"></div><h1>Painted Ronin</h1><p id="loading-step">grinding the ink</p><small>made with proven-stack: Jolt · Recast · three.js · three.quarks</small></div>
+<div id="hud">
+  <div id="hp"><div id="hp-fill"></div></div>
+  <div id="kills">斬 0</div>
+  <div id="msg"></div>
+  <div id="help">WASD move · Shift run · click to lock the mouse, then click to strike · right-click to roll · Space jump</div>
+</div>
+<div id="hurt-flash"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

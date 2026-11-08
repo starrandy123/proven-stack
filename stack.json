@@ -1,0 +1,324 @@
+{
+  "schema": "proven-stack.v1",
+  "libraries": {
+    "three": {
+      "title": "three.js",
+      "by": "Ricardo Cabello (mrdoob) and the three.js authors",
+      "license": "MIT",
+      "home": "https://github.com/mrdoob/three.js",
+      "does": "The 3D renderer every other library here plugs into: scenes, lights, materials, glTF models, skeletal animation (AnimationMixer), IK (CCDIKSolver), the Sky.",
+      "proof": [
+        {
+          "says": "Staroyale.io - a web-based scifi shooter game, the frontend is powered by three.js",
+          "url": "https://discourse.threejs.org/t/staroyale-io-a-web-based-scifi-shooter-game-the-frontend-is-powered-by-three-js/27688",
+          "note": "a shipped three.js game; title as the thread's address spells it"
+        }
+      ],
+      "npm": [
+        {
+          "name": "three",
+          "version": "0.187.0",
+          "integrity": "sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA==",
+          "files": {
+            "build/three.module.js": "three.module.js",
+            "build/three.core.js": "three.core.js"
+          },
+          "addons": {
+            "root": "examples/jsm/",
+            "to": "addons/"
+          }
+        }
+      ],
+      "imports": {
+        "three": "three.module.js",
+        "three/addons/": "addons/",
+        "three/examples/jsm/": "addons/"
+      }
+    },
+    "jolt": {
+      "title": "Jolt Physics (JoltPhysics.js)",
+      "by": "Jorrit Rouwe",
+      "license": "MIT",
+      "home": "https://github.com/jrouwe/JoltPhysics.js",
+      "does": "Rigid bodies, ragdolls (with joint limits and motors that drive a ragdoll to its animation), the CharacterVirtual controller, wheeled vehicles, soft bodies, height-field terrain.",
+      "proof": [
+        {
+          "says": "A multi core friendly rigid body physics and collision detection library. Suitable for games and VR applications. Used by Horizon Forbidden West and Death Stranding 2: On the Beach.",
+          "url": "https://github.com/jrouwe/JoltPhysics"
+        },
+        {
+          "says": "we're confident enough to remove the experimental label and make Jolt the default physics engine for all new 3D projects.",
+          "url": "https://godotengine.org/releases/4.6/"
+        }
+      ],
+      "npm": [
+        {
+          "name": "jolt-physics",
+          "version": "1.1.1",
+          "integrity": "sha512-kMCQu/b4wbHwy7EgZWaSbUyDthIKZUvAGGqta4pBF4Pdq+ljWaNvQoa5hPr/PkVCUVsqcoLwXITUm6975mQhiQ==",
+          "files": {
+            "dist/jolt-physics.wasm-compat.js": "jolt-physics.wasm-compat.js"
+          },
+          "joltMemory": true
+        }
+      ],
+      "imports": {
+        "jolt-physics": "jolt-physics.wasm-compat.js"
+      },
+      "notes": "Single-threaded wasm-compat build (its binary is inside the .js, so no .wasm fetch). Its fixed memory is 128 MB: pass --jolt-mb to give a phone back what the game does not use (measure first)."
+    },
+    "recast": {
+      "title": "Recast & Detour (recast-navigation-js)",
+      "by": "Mikko Mononen and the Recast contributors (C++); Isaac Mason (JS)",
+      "license": "MIT (Recast & Detour: Zlib)",
+      "home": "https://github.com/isaac-mason/recast-navigation-js",
+      "does": "Navigation meshes baked from your level's geometry, path finding, and Detour crowds: many agents steering around each other and obstacles.",
+      "proof": [
+        {
+          "says": "Recast powers AI navigation features in Unity, Unreal, Godot, O3DE and countless AAA and indie games and engines",
+          "url": "https://github.com/recastnavigation/recastnavigation"
+        }
+      ],
+      "npm": [
+        {
+          "name": "@recast-navigation/core",
+          "version": "0.44.0",
+          "integrity": "sha512-N4YO9JBXrGFf3LkrhXmABa7pEwLHvq/gq6o7pLKKu5A4JAp+A5y/9424ps3cVpO1m7ibh3zlXmeewTut9LeXQw==",
+          "files": {
+            "dist/index.mjs": "core/index.mjs"
+          }
+        },
+        {
+          "name": "@recast-navigation/generators",
+          "version": "0.44.0",
+          "integrity": "sha512-i2N/sCfuq7IJcSuMmHuX2Uer6oonr9PzFZTrPpwS/e2t+ZpVLHb3DHFY9evKrL2X8diO7sDUDBOpTfW/4Nwucw==",
+          "files": {
+            "dist/index.mjs": "generators/index.mjs"
+          }
+        },
+        {
+          "name": "@recast-navigation/three",
+          "version": "0.44.0",
+          "integrity": "sha512-7PYy9sAJMK66+0g87xJ4x+jUL9Lv4DrtOwXrJYo1W5YB29f6HjSTVGXw5LooPgqqQcf+RUpoeQaSSul0cvVw/A==",
+          "files": {
+            "dist/index.mjs": "three/index.mjs"
+          }
+        },
+        {
+          "name": "@recast-navigation/wasm",
+          "version": "0.44.0",
+          "integrity": "sha512-VNv7xv50cFCdsGd2LdQWZqtLcWXB7nyi4Ilq9t5GMn3GEfCmJEbbeZWSXX5Mgdc4yj71QueTv15V7hPDAQ9gaw==",
+          "files": {
+            "dist/recast-navigation.wasm-compat.js": "wasm/recast-navigation.wasm-compat.js"
+          }
+        }
+      ],
+      "imports": {
+        "@recast-navigation/core": "core/index.mjs",
+        "@recast-navigation/generators": "generators/index.mjs",
+        "@recast-navigation/three": "three/index.mjs",
+        "@recast-navigation/wasm": "wasm/recast-navigation.wasm-compat.js"
+      },
+      "needs_addons": [
+        "lines/LineMaterial.js",
+        "lines/LineSegments2.js",
+        "lines/LineSegmentsGeometry.js"
+      ]
+    },
+    "quarks": {
+      "title": "three.quarks",
+      "by": "Alchemist0823 (Ziwei Chen)",
+      "license": "MIT",
+      "home": "https://github.com/Alchemist0823/three.quarks",
+      "does": "A particle and VFX system for three.js: batched emitters, trails, sprite sheets, forces; imports Unity Shuriken systems.",
+      "proof": [
+        {
+          "says": "the particle system for this game is powered by three.quarks",
+          "url": "https://discourse.threejs.org/t/staroyale-io-a-web-based-scifi-shooter-game-the-frontend-is-powered-by-three-js/27688",
+          "note": "thin: its author's own game"
+        }
+      ],
+      "npm": [
+        {
+          "name": "three.quarks",
+          "version": "0.17.1",
+          "integrity": "sha512-HiyORXkPZTfy7OBA/IRJqTcNxpo53yctgV3N8dSUG/jdisiVciDFGyf6hVnOLQDrIEmzU0yOtNFvzo+JHCjc7A==",
+          "files": {
+            "dist/three.quarks.esm.js": "three.quarks.esm.js"
+          }
+        },
+        {
+          "name": "quarks.core",
+          "version": "0.17.1",
+          "integrity": "sha512-WkY2Ipw/2uapCXRqA0UQm3U3SOh4TRIKYCVq2I8XolxF3wTLyC0c7XxIzZOYSpjkCDxqFTaM2+DZoRZom8NCdA==",
+          "files": {
+            "dist/quarks.core.esm.js": "quarks.core.esm.js"
+          }
+        }
+      ],
+      "imports": {
+        "three.quarks": "three.quarks.esm.js",
+        "quarks.core": "quarks.core.esm.js"
+      }
+    },
+    "postprocessing": {
+      "title": "postprocessing (pmndrs)",
+      "by": "Raoul van Rüschen and the pmndrs contributors",
+      "license": "Zlib",
+      "home": "https://github.com/pmndrs/postprocessing",
+      "does": "Full-screen effects merged into as few passes as possible: bloom, tone mapping, depth of field, vignette, your own effects.",
+      "proof": [
+        {
+          "says": "This library provides an EffectPass which automatically organizes and merges any given combination of effects. This minimizes the amount of render operations",
+          "url": "https://github.com/pmndrs/postprocessing"
+        }
+      ],
+      "npm": [
+        {
+          "name": "postprocessing",
+          "version": "6.39.6",
+          "integrity": "sha512-HIVhnU8R9tF2YBMXOF2x+TKt3ia+caSHGsycSqrfkd426vH/jwm7w19YQCWsA8jMQJXvAsniLYMiJaNugxUFtA==",
+          "files": {
+            "build/index.js": "index.js"
+          },
+          "license_file": "LICENSE.md"
+        }
+      ],
+      "imports": {
+        "postprocessing": "index.js"
+      }
+    },
+    "n8ao": {
+      "title": "N8AO",
+      "by": "N8python",
+      "license": "ISC",
+      "home": "https://github.com/N8python/n8ao",
+      "does": "Screen-space ambient occlusion with a mobile preset and a half-resolution mode.",
+      "proof": [
+        {
+          "says": "Mobile, Low-end iGPUs and laptops",
+          "url": "https://github.com/N8python/n8ao",
+          "note": "its own quality preset for phones"
+        }
+      ],
+      "npm": [
+        {
+          "name": "n8ao",
+          "version": "2.0.1",
+          "integrity": "sha512-MoP1QKUdj4/3cKEnhFl917t0eQwWGER1l43ckz5mNOPyYWGRDGQbVoTOQz/VBvy01in6QVNG+AL6Xxx5AjZBYA==",
+          "files": {
+            "dist/N8AO.js": "N8AO.js"
+          }
+        }
+      ],
+      "imports": {
+        "n8ao": "N8AO.js"
+      },
+      "needs_addons": [
+        "postprocessing/Pass.js"
+      ]
+    },
+    "howler": {
+      "title": "howler.js",
+      "by": "James Simpson (GoldFire Studios)",
+      "license": "MIT",
+      "home": "https://github.com/goldfire/howler.js",
+      "does": "Sound for games: sprites, fades, loops, 3D position; Web Audio with an HTML5 Audio fallback; unlocks audio on a phone's first tap.",
+      "proof": [
+        {
+          "says": "It defaults to Web Audio API and falls back to HTML5 Audio",
+          "url": "https://github.com/goldfire/howler.js"
+        },
+        {
+          "says": "showcase (Agar.io, Lichess)",
+          "url": "https://howlerjs.com/showcase/"
+        }
+      ],
+      "npm": [
+        {
+          "name": "howler",
+          "version": "2.2.4",
+          "integrity": "sha512-iARIBPgcQrwtEr+tALF+rapJ8qSc+Set2GJQl7xT1MQzWaVkFebdJhR3alVlSiUf5U7nAANKuj3aWpwerocD5w==",
+          "files": {
+            "dist/howler.min.js": "howler.min.js"
+          },
+          "license_file": "LICENSE.md"
+        }
+      ],
+      "imports": {
+        "howler": "howler.min.js"
+      },
+      "script": true
+    },
+    "fastnoise": {
+      "title": "FastNoiseLite",
+      "by": "Jordan Peck (Auburn) and contributors",
+      "license": "MIT",
+      "home": "https://github.com/Auburn/FastNoiseLite",
+      "does": "Noise for terrain, clouds, wind and scatter: OpenSimplex2, Perlin, cellular, fractals, domain warp.",
+      "proof": [
+        {
+          "says": "This class generates noise using the FastNoiseLite library,",
+          "url": "https://docs.godotengine.org/en/stable/classes/class_fastnoiselite.html"
+        }
+      ],
+      "npm": [
+        {
+          "name": "fastnoise-lite",
+          "version": "1.1.1",
+          "integrity": "sha512-3XEk16gmVq1HUL0+BdoR+/wD/tfB6VQjpliqQ7rSSE2omh23wrJGidQ5Mfr4mECCUtBGtcEov44BGIyVqs+U4w==",
+          "files": {
+            "FastNoiseLite.js": "FastNoiseLite.js"
+          }
+        }
+      ],
+      "imports": {
+        "fastnoise-lite": "FastNoiseLite.js"
+      },
+      "license_text": "MIT License\n\nCopyright(c) 2023 Jordan Peck (jordan.me2@gmail.com)\nCopyright(c) 2023 Contributors\n\n(The npm release carries no LICENSE file; the licence is the header of FastNoiseLite.js, kept whole in that file.)\n"
+    },
+    "tween": {
+      "title": "tween.js",
+      "by": "the tween.js authors",
+      "license": "MIT",
+      "home": "https://github.com/tweenjs/tween.js",
+      "does": "Tweens and easing for UI, cameras and simple motion.",
+      "proof": [],
+      "npm": [
+        {
+          "name": "@tweenjs/tween.js",
+          "version": "25.0.0",
+          "integrity": "sha512-XKLA6syeBUaPzx4j3qwMqzzq+V4uo72BnlbOjmuljLrRqdsd3qnzvZZoxvMHZ23ndsRS4aufU6JOZYpCbU6T1A==",
+          "files": {
+            "dist/tween.esm.js": "tween.esm.js"
+          }
+        }
+      ],
+      "imports": {
+        "@tweenjs/tween.js": "tween.esm.js"
+      }
+    },
+    "zzfx": {
+      "title": "ZzFX",
+      "by": "Frank Force (KilledByAPixel)",
+      "license": "MIT",
+      "home": "https://github.com/KilledByAPixel/ZzFX",
+      "does": "Sound effects made by code from a list of numbers: no audio files to ship.",
+      "proof": [],
+      "npm": [
+        {
+          "name": "zzfx",
+          "version": "1.4.0",
+          "integrity": "sha512-yV/7JnIBPThWh/ZLVZLlmadms5bHQQeoWKKA+DafX4554FHypsop1BQrDHhsf2xxXweUmwjWrnpiB42uBGyGlQ==",
+          "files": {
+            "ZzFX.js": "ZzFX.js"
+          }
+        }
+      ],
+      "imports": {
+        "zzfx": "ZzFX.js"
+      }
+    }
+  },
+  "_what": "The catalogue: each library a shipped game or engine already trusts, pinned to an exact npm release (sha512). `node tools/stack.mjs list` prints it; `add` vendors it."
+}

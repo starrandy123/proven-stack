@@ -1,0 +1,71 @@
+{
+  "id": "recast",
+  "title": "Recast & Detour (recast-navigation-js)",
+  "license": "MIT (Recast & Detour: Zlib)",
+  "by": "Mikko Mononen and the Recast contributors (C++); Isaac Mason (JS)",
+  "home": "https://github.com/isaac-mason/recast-navigation-js",
+  "packages": [
+    {
+      "name": "@recast-navigation/core",
+      "version": "0.44.0",
+      "integrity": "sha512-N4YO9JBXrGFf3LkrhXmABa7pEwLHvq/gq6o7pLKKu5A4JAp+A5y/9424ps3cVpO1m7ibh3zlXmeewTut9LeXQw=="
+    },
+    {
+      "name": "@recast-navigation/generators",
+      "version": "0.44.0",
+      "integrity": "sha512-i2N/sCfuq7IJcSuMmHuX2Uer6oonr9PzFZTrPpwS/e2t+ZpVLHb3DHFY9evKrL2X8diO7sDUDBOpTfW/4Nwucw=="
+    },
+    {
+      "name": "@recast-navigation/three",
+      "version": "0.44.0",
+      "integrity": "sha512-7PYy9sAJMK66+0g87xJ4x+jUL9Lv4DrtOwXrJYo1W5YB29f6HjSTVGXw5LooPgqqQcf+RUpoeQaSSul0cvVw/A=="
+    },
+    {
+      "name": "@recast-navigation/wasm",
+      "version": "0.44.0",
+      "integrity": "sha512-VNv7xv50cFCdsGd2LdQWZqtLcWXB7nyi4Ilq9t5GMn3GEfCmJEbbeZWSXX5Mgdc4yj71QueTv15V7hPDAQ9gaw=="
+    }
+  ],
+  "files": {
+    "core/index.mjs": {
+      "bytes": 102681,
+      "sha256": "cef1b0ffe4ff60bb7ec607475e0e17d38f200a121e884761f308eb2fbd5c3285",
+      "from": "@recast-navigation/core@0.44.0"
+    },
+    "core.LICENSE.txt": {
+      "bytes": 1071,
+      "sha256": "319340bb218c8a01bf041dc8f6f2390f176d7c332920695b0774b972b4e99162",
+      "from": "@recast-navigation/core@0.44.0"
+    },
+    "generators/index.mjs": {
+      "bytes": 43924,
+      "sha256": "e28fd815e0b9a3dfbc31144aaecb45ccffe09e2512db0fc00f94a0d6d16d0aa6",
+      "from": "@recast-navigation/generators@0.44.0"
+    },
+    "generators.LICENSE.txt": {
+      "bytes": 1071,
+      "sha256": "319340bb218c8a01bf041dc8f6f2390f176d7c332920695b0774b972b4e99162",
+      "from": "@recast-navigation/generators@0.44.0"
+    },
+    "three/index.mjs": {
+      "bytes": 15082,
+      "sha256": "19876d2ffb9739fa2c2ed97c3e2e630d324f77081c519ef4030c32c30614c3c1",
+      "from": "@recast-navigation/three@0.44.0"
+    },
+    "three.LICENSE.txt": {
+      "bytes": 1071,
+      "sha256": "319340bb218c8a01bf041dc8f6f2390f176d7c332920695b0774b972b4e99162",
+      "from": "@recast-navigation/three@0.44.0"
+    },
+    "wasm/recast-navigation.wasm-compat.js": {
+      "bytes": 1013548,
+      "sha256": "8bc6efc4b50ac191e9a2eae6f2650560af66f62808e04780216f4a3404155ffb",
+      "from": "@recast-navigation/wasm@0.44.0"
+    },
+    "wasm.LICENSE.txt": {
+      "bytes": 1071,
+      "sha256": "319340bb218c8a01bf041dc8f6f2390f176d7c332920695b0774b972b4e99162",
+      "from": "@recast-navigation/wasm@0.44.0"
+    }
+  }
+}

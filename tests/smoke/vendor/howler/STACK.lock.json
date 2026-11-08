@@ -1,0 +1,26 @@
+{
+  "id": "howler",
+  "title": "howler.js",
+  "license": "MIT",
+  "by": "James Simpson (GoldFire Studios)",
+  "home": "https://github.com/goldfire/howler.js",
+  "packages": [
+    {
+      "name": "howler",
+      "version": "2.2.4",
+      "integrity": "sha512-iARIBPgcQrwtEr+tALF+rapJ8qSc+Set2GJQl7xT1MQzWaVkFebdJhR3alVlSiUf5U7nAANKuj3aWpwerocD5w=="
+    }
+  ],
+  "files": {
+    "howler.min.js": {
+      "bytes": 36173,
+      "sha256": "736c339444c88baad593e24afdf1d6e8f574019b4e37a110ecb453ff745ffd41",
+      "from": "howler@2.2.4"
+    },
+    "LICENSE.txt": {
+      "bytes": 1088,
+      "sha256": "0ad5aef7beeb552832fe01db1c46933f948dfe5da35017bd0efa0006ffd2ced9",
+      "from": "howler@2.2.4"
+    }
+  }
+}

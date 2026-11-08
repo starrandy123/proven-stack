@@ -1,0 +1,18 @@
+{
+  "imports": {
+    "fastnoise-lite": "./vendor/fastnoise/FastNoiseLite.js",
+    "howler": "./vendor/howler/howler.min.js",
+    "jolt-physics": "./vendor/jolt/jolt-physics.wasm-compat.js",
+    "postprocessing": "./vendor/postprocessing/index.js",
+    "three.quarks": "./vendor/quarks/three.quarks.esm.js",
+    "quarks.core": "./vendor/quarks/quarks.core.esm.js",
+    "@recast-navigation/core": "./vendor/recast/core/index.mjs",
+    "@recast-navigation/generators": "./vendor/recast/generators/index.mjs",
+    "@recast-navigation/three": "./vendor/recast/three/index.mjs",
+    "@recast-navigation/wasm": "./vendor/recast/wasm/recast-navigation.wasm-compat.js",
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/",
+    "three/examples/jsm/": "./vendor/three/addons/",
+    "zzfx": "./vendor/zzfx/ZzFX.js"
+  }
+}

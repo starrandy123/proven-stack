@@ -1,0 +1,41 @@
+{
+  "id": "quarks",
+  "title": "three.quarks",
+  "license": "MIT",
+  "by": "Alchemist0823 (Ziwei Chen)",
+  "home": "https://github.com/Alchemist0823/three.quarks",
+  "packages": [
+    {
+      "name": "three.quarks",
+      "version": "0.17.1",
+      "integrity": "sha512-HiyORXkPZTfy7OBA/IRJqTcNxpo53yctgV3N8dSUG/jdisiVciDFGyf6hVnOLQDrIEmzU0yOtNFvzo+JHCjc7A=="
+    },
+    {
+      "name": "quarks.core",
+      "version": "0.17.1",
+      "integrity": "sha512-WkY2Ipw/2uapCXRqA0UQm3U3SOh4TRIKYCVq2I8XolxF3wTLyC0c7XxIzZOYSpjkCDxqFTaM2+DZoRZom8NCdA=="
+    }
+  ],
+  "files": {
+    "three.quarks.esm.js": {
+      "bytes": 124901,
+      "sha256": "d9f03b24fea79ba5b6aec1d759ab95a7156bacf29108eb96ab01268277240598",
+      "from": "three.quarks@0.17.1"
+    },
+    "three.quarks.LICENSE.txt": {
+      "bytes": 1089,
+      "sha256": "a5475475eea369815620d571431d6293996ee2492c02c41f0c47596f6fbcd4dd",
+      "from": "three.quarks@0.17.1"
+    },
+    "quarks.core.esm.js": {
+      "bytes": 185886,
+      "sha256": "b214161d4f49500f1adcf65ba39a1edcc7162454f53a6c7fe4576512f24fcb3a",
+      "from": "quarks.core@0.17.1"
+    },
+    "quarks.core.LICENSE.txt": {
+      "bytes": 1089,
+      "sha256": "a5475475eea369815620d571431d6293996ee2492c02c41f0c47596f6fbcd4dd",
+      "from": "quarks.core@0.17.1"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "zzfx",
+  "title": "ZzFX",
+  "license": "MIT",
+  "by": "Frank Force (KilledByAPixel)",
+  "home": "https://github.com/KilledByAPixel/ZzFX",
+  "packages": [
+    {
+      "name": "zzfx",
+      "version": "1.4.0",
+      "integrity": "sha512-yV/7JnIBPThWh/ZLVZLlmadms5bHQQeoWKKA+DafX4554FHypsop1BQrDHhsf2xxXweUmwjWrnpiB42uBGyGlQ=="
+    }
+  ],
+  "files": {
+    "ZzFX.js": {
+      "bytes": 10301,
+      "sha256": "43f321101a935892c112a291e2e943b4da33159b43fcd4a21f3eae710f4a27ff",
+      "from": "zzfx@1.4.0"
+    },
+    "LICENSE.txt": {
+      "bytes": 1089,
+      "sha256": "8917d3dfd55d69fb08e7786d4ac5bf01a4f7eb89c6008713bb4e48c3016ce537",
+      "from": "zzfx@1.4.0"
+    }
+  }
+}

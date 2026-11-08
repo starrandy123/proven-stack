@@ -1,0 +1,27 @@
+{
+  "id": "jolt",
+  "title": "Jolt Physics (JoltPhysics.js)",
+  "license": "MIT",
+  "by": "Jorrit Rouwe",
+  "home": "https://github.com/jrouwe/JoltPhysics.js",
+  "packages": [
+    {
+      "name": "jolt-physics",
+      "version": "1.1.1",
+      "integrity": "sha512-kMCQu/b4wbHwy7EgZWaSbUyDthIKZUvAGGqta4pBF4Pdq+ljWaNvQoa5hPr/PkVCUVsqcoLwXITUm6975mQhiQ=="
+    }
+  ],
+  "files": {
+    "jolt-physics.wasm-compat.js": {
+      "bytes": 3231900,
+      "sha256": "417f4dab7ca6de3d446e4c1b17dea47d69f527780109792d8e6beb0617170123",
+      "from": "jolt-physics@1.1.1"
+    },
+    "LICENSE.txt": {
+      "bytes": 1074,
+      "sha256": "9907e3cd4976e88e7b4d8aee1a035ffa7d3ebe84993d00b6b273f716c74b794c",
+      "from": "jolt-physics@1.1.1"
+    }
+  },
+  "joltMemoryMB": 32
+}

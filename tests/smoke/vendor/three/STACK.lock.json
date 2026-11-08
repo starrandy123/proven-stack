@@ -1,0 +1,71 @@
+{
+  "id": "three",
+  "title": "three.js",
+  "license": "MIT",
+  "by": "Ricardo Cabello (mrdoob) and the three.js authors",
+  "home": "https://github.com/mrdoob/three.js",
+  "packages": [
+    {
+      "name": "three",
+      "version": "0.187.0",
+      "integrity": "sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA=="
+    }
+  ],
+  "files": {
+    "three.module.js": {
+      "bytes": 658900,
+      "sha256": "104f56145899722094556490d787aae0617cc2fc3382f31df02d724ea1aee341",
+      "from": "three@0.187.0"
+    },
+    "three.core.js": {
+      "bytes": 1474799,
+      "sha256": "613e370f76638fdef83926642bf256dc9615684922de1ce1f63a8583e5d78578",
+      "from": "three@0.187.0"
+    },
+    "addons/loaders/GLTFLoader.js": {
+      "bytes": 119861,
+      "sha256": "532ac726e120039acbcd6cf54328c57acbf7b438176afaa6951257126d11bff1",
+      "from": "three@0.187.0"
+    },
+    "addons/utils/SkeletonUtils.js": {
+      "bytes": 11535,
+      "sha256": "b1632a703206c3d830de9fcbe515696770d04b71a15ee6b50afa6d2c3298c86f",
+      "from": "three@0.187.0"
+    },
+    "addons/utils/BufferGeometryUtils.js": {
+      "bytes": 39153,
+      "sha256": "7bda2a8ba836b2bcf67cb938d4b9e1bb5d1b1bc616817103ed858c0b58296ce7",
+      "from": "three@0.187.0"
+    },
+    "addons/objects/Sky.js": {
+      "bytes": 11526,
+      "sha256": "34121b60a3bd9adc004a5a637f6135e9d2b72757eeb9e476ae1988fe2db6a9fb",
+      "from": "three@0.187.0"
+    },
+    "addons/lines/LineMaterial.js": {
+      "bytes": 14529,
+      "sha256": "5f4ba22891c54d50a51e8bab6c648399e919e6832c0d03060fbe1ec7c771a93f",
+      "from": "three@0.187.0"
+    },
+    "addons/lines/LineSegments2.js": {
+      "bytes": 11477,
+      "sha256": "fcbc20f576e88343cea12131f49b7003d7ab44ede422fcb694e567456022f7a0",
+      "from": "three@0.187.0"
+    },
+    "addons/lines/LineSegmentsGeometry.js": {
+      "bytes": 6893,
+      "sha256": "471f0a954a0c9c59d3d151392f424142a9164a722802f63b371971378a84a1b1",
+      "from": "three@0.187.0"
+    },
+    "addons/postprocessing/Pass.js": {
+      "bytes": 4218,
+      "sha256": "444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5",
+      "from": "three@0.187.0"
+    },
+    "LICENSE.txt": {
+      "bytes": 1081,
+      "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
+      "from": "three@0.187.0"
+    }
+  }
+}

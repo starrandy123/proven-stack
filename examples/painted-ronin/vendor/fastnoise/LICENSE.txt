@@ -1,0 +1,6 @@
+MIT License
+
+Copyright(c) 2023 Jordan Peck (jordan.me2@gmail.com)
+Copyright(c) 2023 Contributors
+
+(The npm release carries no LICENSE file; the licence is the header of FastNoiseLite.js, kept whole in that file.)

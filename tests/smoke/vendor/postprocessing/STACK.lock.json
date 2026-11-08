@@ -1,0 +1,26 @@
+{
+  "id": "postprocessing",
+  "title": "postprocessing (pmndrs)",
+  "license": "Zlib",
+  "by": "Raoul van Rüschen and the pmndrs contributors",
+  "home": "https://github.com/pmndrs/postprocessing",
+  "packages": [
+    {
+      "name": "postprocessing",
+      "version": "6.39.6",
+      "integrity": "sha512-HIVhnU8R9tF2YBMXOF2x+TKt3ia+caSHGsycSqrfkd426vH/jwm7w19YQCWsA8jMQJXvAsniLYMiJaNugxUFtA=="
+    }
+  ],
+  "files": {
+    "index.js": {
+      "bytes": 634678,
+      "sha256": "2f9eb56edeae8da295c776d5e7884e0cabac60a8c47453042453ab95442b3687",
+      "from": "postprocessing@6.39.6"
+    },
+    "LICENSE.txt": {
+      "bytes": 858,
+      "sha256": "b7650918449bd5fb011ce30ce0e5bcda27aa9639db1fb3aef8c67c32945237f2",
+      "from": "postprocessing@6.39.6"
+    }
+  }
+}

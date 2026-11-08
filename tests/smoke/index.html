@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>stack smoke</title>
+<script type="importmap">{"imports": {"fastnoise-lite": "./vendor/fastnoise/FastNoiseLite.js", "howler": "./vendor/howler/howler.min.js", "jolt-physics": "./vendor/jolt/jolt-physics.wasm-compat.js", "postprocessing": "./vendor/postprocessing/index.js", "three.quarks": "./vendor/quarks/three.quarks.esm.js", "quarks.core": "./vendor/quarks/quarks.core.esm.js", "@recast-navigation/core": "./vendor/recast/core/index.mjs", "@recast-navigation/generators": "./vendor/recast/generators/index.mjs", "@recast-navigation/three": "./vendor/recast/three/index.mjs", "@recast-navigation/wasm": "./vendor/recast/wasm/recast-navigation.wasm-compat.js", "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/", "three/examples/jsm/": "./vendor/three/addons/", "zzfx": "./vendor/zzfx/ZzFX.js"}}</script></head><body><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import initJolt from 'jolt-physics';
+import { init as initRecast } from '@recast-navigation/core';
+import { threeToSoloNavMesh } from '@recast-navigation/three';
+import { BatchedRenderer } from 'three.quarks';
+import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocessing';
+import FastNoiseLite from 'fastnoise-lite';
+import { zzfx } from 'zzfx';
+import 'howler';
+const out = {};
+const Jolt = await initJolt(); out.jolt = typeof Jolt.PhysicsSystem === 'function';
+await initRecast();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20, 4, 4).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial());
+const { success, navMesh } = threeToSoloNavMesh([ground], { cs: 0.2, ch: 0.2 }); out.recast = success && !!navMesh;
+out.quarks = typeof BatchedRenderer === 'function';
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c') }); const comp = new EffectComposer(r);
+comp.addPass(new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera())); comp.addPass(new EffectPass(undefined, new BloomEffect())); out.post = true;
+out.noise = typeof new FastNoiseLite().GetNoise(1, 2) === 'number'; out.zzfx = typeof zzfx === 'function'; out.howler = typeof window.Howl === 'function';
+window.__SMOKE = out; window.__STACK_MEMORY = { totalMB: 64 + 16, jolt: 64 };
+(function loop(){ comp.render(); requestAnimationFrame(loop); })();
+window.__MOSA_BOOT = { ok: Object.values(out).every(Boolean) }; console.log('SMOKE', JSON.stringify(out));
+</script></body></html>
