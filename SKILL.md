@@ -76,10 +76,12 @@ Each module of the worked example names, in its header, the upstream example it 
   blade meets the body; an attack budget so enemies take turns (Kingdoms of Amalur's grid: never more than two at once); hit-stop of
   0.06-0.11 s, trauma² screen shake, a wind-up the player can read before every enemy blow. Every strike goes to ONE locked enemy
   (Arkham's Freeflow: a strike finds the enemy you face, and the next one when it falls; God of War 2018: target from stick and view)
-  and reaches it with an AUTHORED DASH ATTACK: the clip's own stride and knee bend carry the body, its root motion warped onto the
-  target (Unreal's Motion Warping; Sekiro's Shadowrush, "a long-range rushing thrust"; Ninja Gaiden 4's Flying Swallow, a dash toward an
-  enemy). Never slide a body along the ground under an in-place clip, and never compose a jump from mismatched halves: both read as
-  sloppy at once (the owner, 8 Nov: "It looks like a frog" · "No front flip!" · "Just dash attack").
+  and reaches it with an AUTHORED DASH ATTACK, whole body (Sekiro's Shadowrush, "a long range, powerful thrust"; Ninja Gaiden 4's Flying
+  Swallow). Measure the clip's feet first: carry the body by its own planted foot (Daniel Holden's foot locking), and fly only the rest
+  of the gap, low, while no foot is down, ending on the cut (Unreal's Motion Warping window ends on the strike). Wall it off the bones:
+  the lift, the front knee at mid-move, how far a planted foot slides. Never slide a body along the ground under an in-place clip, and
+  never compose a jump from mismatched halves: both read as sloppy at once (the owner, 8 Nov: "It looks like a frog" · "No front flip!" ·
+  "Just dash attack"). Rehearse a fight film beat by beat on the held clock before filming it: it finds the game's own defects.
 - **Grass:** SimonDev's Quick_Grass (MIT), the method of Ghost of Tsushima's GDC 2021 talk.
 
 ## 3. A painted look is one language, not one filter
@@ -107,7 +109,9 @@ have a strong dislike of 'painterly post fx'"). Give every surface strokes BEFOR
   meets a body, pressed hard on a death (wider, crimson, lingering), as a calligrapher's stroke widens under pressure.
 - **Banners are dyed cloth, not cards:** strokes in the cloth's own UV (world strokes swim on a banner that swings), an outline cut by a
   brush and frayed at its free side, a crest brushed on it, a wave in the one wind.
-- **A painted sky:** three.js's `Sky.js` with its luminance stepped into four soft tones, strokes anchored to the sky's own directions,
+- **A painted sky:** three.js's `Sky.js` with its luminance held to four premixed tones laid WET — each step blended over most of its
+  span, its edge wandering with the strokes (Gurney: grade from saturated at the top to paler and warmer at the horizon; a 24 % blend
+  read as flat bands to the owner, "just light blue band to dark blue bands"; wall it against the smooth sky under it) — strokes anchored to the sky's own directions,
   a printed band across the top (the ukiyo-e bokashi); the fog walks to the sky's own horizon colour, measured off the sky (Firewatch).
 
 ## 4. Every rule is a wall, and every wall is proven red

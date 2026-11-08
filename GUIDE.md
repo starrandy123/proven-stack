@@ -61,8 +61,8 @@ was the clue.
 ## 5. The fight and the specials
 - **Combat:** a three-strike combo (the third is heavy), hit-stop of 0.07-0.11 s, trauma² screen shake, a roll with invulnerability
   frames, and a parry when blades meet.
-- **The lock:** every strike goes to one locked bandit (an ensō under him), up to 12 m away (§7). How the ronin closes the distance is
-  being rebuilt as an authored dash attack, his word of 8 Nov (§7).
+- **The lock:** every strike goes to one locked bandit (an ensō under him), up to 12 m away; past reach the ronin closes with an
+  authored dash attack, carried by its own feet (§7).
 - **Ki:** fills from hits, kills and parries.
   - 閃: a leaping dash that cuts a line. The bandits fall a beat after the blade passes, and a thin ink stroke hangs in the air.
   - 嵐: three beats of cuts all around.
@@ -127,10 +127,28 @@ He watched the reveal and wrote four notes. Each became a measured rule with its
   - **the approach, three tries and his verdicts:** a composed jump with tucked legs ("It looks like a frog rather than a leap to the
     enemy!"); a low lunge-stride leap with the front leg locked straight ("The front leg knee needs to bend … Did you use any reference
     clips at all"); then his word: "No front flip!" · "Just dash attack" · "We don't want the guy to roll, just dash to the opponent
-    with the leg bend". The lesson: start from shipped moves and authored clips, never compose a move from guesses. The next build uses
-    Quaternius's authored CC0 `Sword_Dash` (its front knee bends to 55-77° as it drives in), its root motion warped onto the target,
-    after Sekiro's Shadowrush and Ninja Gaiden 4's Flying Swallow.
+    with the leg bend". The lesson: start from shipped moves and authored clips, never compose a move from guesses.
+  - **what it became, from references read first** (research J): **the dash attack** is Quaternius's authored CC0 `Sword_Dash`, the
+    whole body as he made it (Sekiro's Shadowrush, "a long range, powerful thrust"; Ninja Gaiden 4's Flying Swallow closes on a locked
+    enemy ~2.3× faster than running). Measured on our rig, the clip is authored in place and always has one foot down, so the body
+    is carried by its own feet (Daniel Holden's foot locking): over its planted left foot through the step (0.75 m), then on its planted
+    front foot; only the rest of the gap is flown, low (≤ 0.13 m: kendo's "forward instead of upward"), and only during the step, the
+    front foot landing with the cut (ki-ken-tai-icchi). From 7 m: 6.07 m in 0.53 s, 0.12 m up, the front knee 66° at mid-dash, a
+    planted foot slid 0.18-0.20 m. The near lunge was measured the same way and slid its planted feet 0.41 m; it now moves while its feet
+    are up (0.15 m).
   - 閃 jumps through its line.
+- **"The sky transition horizon needs to be better because it's just light blue band to dark blue bands."** The sky's four tones were
+  cut with a blend over 24 % of each step: flat bands with a line between. Painters grade it wet (Gurney: "gradate from a more saturated
+  blue at the top to a paler and warmer blue at the horizon"; Masuyama pre-wets the paper for "soft edges"), so each step now blends over
+  70 % of its span and its edge wanders with the strokes. A dither by the brush was tried first and read as blotches. Measured against
+  the smooth sky under it, the sky is flat over 20 % of where it should still change (the old bands: 53 %).
+- **"many slashes on one enemy to show the various types of damage … then when we kill him, leap to the next guy and free flow"**: the
+  fight film (`film/fight2.js`) waits on the game's own states, beat by beat: the dash in, a cut he blocks, a wound, the heavy that
+  breaks his worn guard (Sekiro's posture), quick cuts into the dazed man, the heavy that kills (crimson), the lock passing on by itself
+  (Arkham Knight), then a dash to each of the camp's others. Rehearsing it found two defects of the game: a bandit's guard was judged from
+  the way a cut pushes, so no sideways cut was ever blocked (now it faces the man who strikes), and a press made after a clash was
+  dropped because the cut's clip ended before its window (now it chains). The first bandit's health is raised and his guard made certain
+  for the film, said in the script.
 - **"The attack slashes are too wide in strokes and must be thinner"**: the crescent ran from near the hilt to past the tip, about a
   metre wide.
   - It is now a band along the tip's path, a fifth of the blade at its widest, drawn to a point at both ends.
@@ -164,7 +182,9 @@ Each wall is a measurement of the running game, in Chromium and in WebKit, prove
 | W8 turns | four bandits never overspend the attack budget (≤ 10), never more than two strike at once, impacts ≥ 0.29 s apart | `budget`: peak 20/10, four at once |
 | W9 contact | at each strike's contact the real sword (off the skeleton) passes within 0.6 m of the bandit's axis | `reach`: 0.8-0.9 m off |
 | W10 the lock | a bandit 7 m away at 110° from the ronin's facing: one strike goes to him and lands | `nolock`: the old 70° cone, a miss |
-| W11 the approach | from 7 m the strike reaches him without sliding on the ground (≤ 0.35 m); being rewritten for the dash attack (his word of 8 Nov) | `slide`: 2.6 m slid on the ground, and a miss · `frog`: the tucked jump |
+| W11 the dash | from 7 m Sword_Dash, ≤ 0.15 m up, the front knee ≤ 120° at mid-dash, no planted foot sliding over 0.35 m, the blow lands; from 3.5 m the cut's own lunge, its feet ≤ 0.35 m | `frog`: 0.89 m up · `strideleap`: 0.34 m up, knee 141° · `slide`: 2.13 m slid · `flatdash`: 5.45 m slid |
+| W14 the guard | a bandit facing the ronin with his guard up blocks a sideways cut | `guardpush`: judged from the push, never blocked |
+| W15 the chain | a press made after a clash chains into the next cut | `dropchain`: the press dropped |
 | W12 the press | a cut that wounds ≥ 1.6× a cut in the air, one that kills ≥ 2.6× and lingers ≥ 1.2 s; 閃's ink ≥ 1.8× over a death | `nopress`: all 0.133 m |
 
 The painted language has its own walls (`tests/paint.mjs`), measured on the materials the game builds and the pixels it draws:
@@ -180,6 +200,7 @@ The painted language has its own walls (`tests/paint.mjs`), measured on the mate
 | S1 bokashi | the top of the picture printed darker (−10 L*) with an uneven edge | `bokashi0` |
 | S2 four tones | the sky's light sits on 3-5 tones | `skyramp`: the smooth ramp back |
 | S3 strokes | the sky carries strokes (fine detail) laid flat | `strokes0`, `strokes90` |
+| S7 graded | where the smooth sky still changes, the painted sky is flat over ≤ 30 % of it | `skybands`: the old 24 % blend, 53 % flat |
 | C1-C4 clouds | three tones on the swatches' hues; the shadow cooler than the light; the lit side shows away from the sun; the edge glows toward it | `rampLinear`, `rampGrey`, `sunFlip`, `rim0` |
 | C5 the pace | the painted deck ≤ 0.35°/s seen from the valley; Sky.js's sheet ≤ 0.2°/s, on the clock the running game feeds it | `skyms`: 138°/s · `lowclouds`: 0.57°/s |
 | C6 the deck | one flat base, ≥ 150 m over the highest peak, no two clouds closer than their breadths | `lowclouds`: −14 m · `cloudclump`: 41 pairs |

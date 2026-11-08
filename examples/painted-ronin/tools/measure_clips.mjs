@@ -17,6 +17,11 @@ await page.goto(url + 'index.html?test&cine');
 await page.waitForFunction(() => window.__MOSA_BOOT && window.__MOSA_BOOT.ok === true, null, { timeout: 45000 });
 const data = await page.evaluate(() => {
   const G = window.__GAME, T = G.THREE, out = {};
+  // THE FEET, for a clip the game carries by its own planted foot (Daniel Holden, foot locking: a planted foot keeps "a static position on
+  // the floor which was the toe's location when the contact first became active"; research J §1c): each foot's middle (ankle and ball)
+  // across and ahead, and its lowest height, every 1/60 s in the character's own frame. Sword_Dash is authored in place (its root bone
+  // never moves), so the body's travel is what its feet say.
+  const FEET = new Set(['Sword_Dash']);
   const p = new G.ronin.constructor(G.kit, 'ronin'); p.root.updateMatrixWorld(true);
   const inv = new T.Matrix4().copy(p.root.matrixWorld).invert();
   for (const [name, clip] of Object.entries(G.kit.clips)) {
@@ -24,11 +29,15 @@ const data = await page.evaluate(() => {
     p.mixer.stopAllAction(); const a = p.mixer.clipAction(clip); a.reset(); a.play(); a.paused = true;
     const dur = clip.duration, N = Math.max(2, Math.round(dur * 60)), tip = [], base = [], speed = [];
     const t3 = new T.Vector3(), b3 = new T.Vector3(); let prev = null;
+    const feet = FEET.has(name) ? [] : null, fa = new T.Vector3(), fb = new T.Vector3();
+    const foot = (s) => { p.bones['foot_' + s].getWorldPosition(fa).applyMatrix4(inv); p.bones['ball_' + s].getWorldPosition(fb).applyMatrix4(inv);
+      return [+((fa.x + fb.x) / 2).toFixed(4), +((fa.z + fb.z) / 2).toFixed(4), +Math.min(fa.y, fb.y).toFixed(4)]; };
     for (let i = 0; i <= N; i++) {
       a.time = Math.min(dur, i / 60); p.mixer.update(0); p.root.updateMatrixWorld(true);
       p.sword.userData.tip.getWorldPosition(t3).applyMatrix4(inv); p.sword.userData.base.getWorldPosition(b3).applyMatrix4(inv);
       tip.push(t3.toArray().map((v) => +v.toFixed(3))); base.push(b3.toArray().map((v) => +v.toFixed(3)));
       speed.push(prev ? t3.distanceTo(prev) * 60 : 0); prev = t3.clone();
+      if (feet) feet.push([...foot('l'), ...foot('r')]);               // [left x, z, y, right x, z, y]
     }
     const top = Math.max(...speed), hits = [];
     for (let i = 2; i < speed.length - 2; i++) {                       // a blow: a local peak of the tip's speed, at least 55% of the clip's fastest
@@ -53,7 +62,7 @@ const data = await page.evaluate(() => {
       contact = { t: +(best / 60).toFixed(3), frame: best, tip: tip[best], reach: +tip[best][2].toFixed(3), off: +tip[best][0].toFixed(3),
         swing: [0, 1, 2].map((k) => +((p1[k] - p0[k]) * 30).toFixed(2)) };
     }
-    out[name] = { duration: +dur.toFixed(3), hits, contact, topSpeed: +top.toFixed(2), tip, base };
+    out[name] = { duration: +dur.toFixed(3), hits, contact, topSpeed: +top.toFixed(2), tip, base, ...(feet ? { feet } : {}) };
   }
   return out;
 });

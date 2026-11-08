@@ -14,11 +14,16 @@
 //                  The bound read is 0.29 s: impacts are stamped on rendered frames, and 10 ms is under one frame at 60 fps.
 //   W10 the lock — a bandit 7 m off to the ronin's side (110° from where he faces, outside the old 70° cone): one press of strike goes
 //                  to HIM and the blow lands (Arkham's Freeflow: a strike finds the enemy; God of War's targeting)        plant nolock
-//   W11 the leap — that strike crosses the 7 m in the AIR and like a samurai: the body 0.2-0.5 m over the ground (forward, not up:
-//                  "kendo is trying to move forward instead of upward"), ≤ 0.35 m slid along the ground before the impact, and at
-//                  mid-flight a STRIDE, not a tuck (the feet ≥ 0.6 m apart along the travel, one knee ≥ 150°); from 3.5 m the combo's
-//                  own cuts lunge off the ground too (the owner, 8 Nov: "sloppily sliding to them instead of jumping and attacking" ·
-//                  "It looks like a frog rather than a leap to the enemy!")                                       plants slide, frog
+//   W11 the dash — that strike crosses the 7 m as a DASH ATTACK, never a jump (research J §1; the owner, 8 Nov: "No front flip!" · "Just
+//                  dash attack" · "just dash to the opponent with the leg bend"): Quaternius's Sword_Dash, the body ≤ 0.15 m over the
+//                  ground (kendo: "forward instead of upward"), the FRONT knee bent at mid-dash (≤ KNEE_MAX°, the inner angle off the
+//                  bones; a straight leg reads ~180°), no planted foot sliding more than 0.35 m before the cut (Holden's foot locking:
+//                  the stiller foot on the ground, frame by frame, off the bones), and the blow lands; from 3.5 m the combo's own cut
+//                  lunges off the ground (≥ 0.05 m, ≤ 0.35 m slid)                      plants frog, strideleap, slide, flatdash
+//   W14 the guard — a bandit facing the ronin with his guard up (blockChance 1) blocks the combo's sideways first cut: a guard faces the
+//                  man who strikes, not the way his cut pushes (found 8 Nov rehearsing the showcase's clash: none was ever blocked) plant guardpush
+//   W15 the chain — a press made after the clash, while the blocked cut recovers, chains into the second cut (Sword_Regular_A's clip
+//                  ends before a blocked cut's window, and the press was dropped: no combo went on past a block)  plant dropchain
 //   W12 the press — the brush presses where the blade wounds: a cut that wounds is ≥ 1.6× as wide as a cut in the air, a cut that
 //                  kills ≥ 2.6× (and ≥ 1.3× a wound) and lingers ≥ 1.2 s; 閃's ink line swells ≥ 1.8× over a body it kills (sumi-e: light
 //                  pressure thin, heavy pressure bold; the owner, 8 Nov: "thicker as they injure their enemies … and show death") plant nopress
@@ -172,36 +177,87 @@ async function open(query, viewport = { width: 960, height: 540 }) {
     await page.close();
   }
 
-  // W10 + W11: the lock and the leap. One bandit 7 m away at 110° from the ronin's facing (the others far off), one strike; then a bandit
-  // 3.5 m ahead and the combo's first cut (a lunge). Every rendered frame reads the strike's own record: its target, how high the body
-  // rose over the ground under it, how far it slid along the ground before the impact, and whether the blow landed.
+  // W10 + W11: the lock and the dash. One bandit 7 m away at 110° from the ronin's facing (the others far off), one strike; then a bandit
+  // 3.5 m ahead and the combo's first cut (a lunge). Every rendered frame reads the BONES, not the game's own record: the root's height
+  // over the ground, each foot's middle and height, and at mid-dash the front leg's knee; the strike's record says only its kind and clip.
   {
+    const KNEE_MAX = 120;
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
-      const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
       G.bandits.blockChance = 0; G.bandits.feintChance = 0;
       const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
       const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
       const put = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
       camp.forEach((b) => put(b, c.x - 9, c.y + 9));                       // the others out of the lock's 12 m
-      const T = G.THREE, pose = { stride: 0, knee: 0, taken: false };
-      const sample = () => { const R = G.ronin, P = (n) => R.bones[n].getWorldPosition(new T.Vector3()), f = new T.Vector3(Math.sin(R.root.rotation.y), 0, Math.cos(R.root.rotation.y));
-        const ang = (a, b, c) => { const u = a.clone().sub(b).normalize(), v = c.clone().sub(b).normalize(); return Math.acos(Math.max(-1, Math.min(1, u.dot(v)))) * 57.3; };
-        pose.stride = +Math.abs(P('foot_r').sub(P('foot_l')).dot(f)).toFixed(2); pose.knee = Math.round(Math.max(ang(P('thigh_r'), P('calf_r'), P('foot_r')), ang(P('thigh_l'), P('calf_l'), P('foot_l')))); pose.taken = true; };
-      const follow = (b) => new Promise((ok) => { const hp0 = b.hp; let rec = null; pose.taken = false; const tick = () => { const st = G.pc.strike;
-        if (st && st.air && st.air.kind === 'leap' && !st.air.landed && !pose.taken && (st.t - st.air.tau) / st.air.T >= 0.5) sample();   // mid-flight
-        if (st) rec = { target: st.target === b, lift: +st.lift.toFixed(2), slide: +st.groundSlide.toFixed(2), clip: st.def.clip, air: st.air ? st.air.kind : 'ground', stride: pose.stride, knee: pose.knee };
-        if (!st && rec) return ok({ ...rec, landed: b.hp < hp0 || b.dead }); if (rec && st && st.t > st.impact + 0.12) return ok({ ...rec, landed: b.hp < hp0 || b.dead }); requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
+      const R = G.ronin, W = (n) => R.bones[n].getWorldPosition(new T.Vector3());
+      const ang = (a, b, c) => { const u = a.clone().sub(b).normalize(), v = c.clone().sub(b).normalize(); return Math.acos(Math.max(-1, Math.min(1, u.dot(v)))) * 57.3; };
+      const feet = () => ['l', 'r'].map((s) => { const a = W('foot_' + s), b = W('ball_' + s), x = (a.x + b.x) / 2, z = (a.z + b.z) / 2; return { x, z, h: Math.min(a.y, b.y) - G.land.groundY(x, z) }; });
+      const follow = (b) => new Promise((ok) => {
+        const hp0 = b.hp, start = R.root.position.clone(), to = b.root.position.clone().sub(start).setY(0).normalize();
+        let rec = null, prev = null, h0 = null, slide = 0, lift = 0, knee = null, stride = null, frames = 0;
+        const tick = () => { const st = G.pc.strike;
+          if (st) {
+            const f = feet(); if (h0 === null) h0 = Math.min(f[0].h, f[1].h);
+            if (st.t <= st.impact + 0.25) {
+              if (prev) {                                                          // the stiller foot on the ground: how far it moved since the last frame
+                const moved = [0, 1].filter((k) => f[k].h < h0 + 0.05 && prev[k].h < h0 + 0.05).map((k) => Math.hypot(f[k].x - prev[k].x, f[k].z - prev[k].z));
+                if (moved.length) slide += Math.min(...moved);
+              }
+              prev = f; frames++;
+            }
+            if (st.t <= st.impact) lift = Math.max(lift, R.root.position.y - G.land.groundY(R.root.position.x, R.root.position.z));
+            const A = st.air, u = !A ? st.t / st.impact : A.kind === 'dash' ? (st.t - A.tA) / A.T : (st.t - A.tau) / A.T;
+            if (knee === null && u >= 0.5) {                                        // mid-dash: the front leg is the foot further along the way to him
+              const fl = W('foot_l'), fr = W('foot_r'), front = fl.clone().sub(fr).dot(to) > 0 ? 'l' : 'r';
+              knee = Math.round(ang(W('thigh_' + front), W('calf_' + front), W('foot_' + front))); stride = +Math.abs(fl.clone().sub(fr).dot(to)).toFixed(2);
+            }
+            rec = { target: st.target === b, clip: st.def.clip, air: st.air ? st.air.kind : 'ground', D: st.air && st.air.D ? +st.air.D.toFixed(2) : null, T: st.air && st.air.T ? +st.air.T.toFixed(3) : null };
+          }
+          const done = (!st && rec) || (rec && st && st.t > st.impact + 0.3);
+          if (done) return ok({ ...rec, lift: +lift.toFixed(3), slide: +slide.toFixed(2), knee, stride, frames, landed: b.hp < hp0 || b.dead });
+          requestAnimationFrame(tick); };
+        requestAnimationFrame(tick); });
       const out = {};
       { const b = camp[0], p = G.ronin.root.position, a = 110 * Math.PI / 180; G.facing = 0; put(b, p.x + Math.sin(a) * 7, p.z + Math.cos(a) * 7); b.hp = 99; await wait(400);
-        G.facing = 0; G.pc.strike = null; G.strike(0); out.far = await follow(b); await wait(1200); put(b, c.x - 9, c.y + 9); }
+        G.facing = 0; G.pc.strike = null; G.strike(0); out.far = await follow(b); await wait(1400); put(b, c.x - 9, c.y + 9); }
       { const b = camp[1], p = G.ronin.root.position; G.facing = Math.atan2(-1, 0); put(b, p.x - 3.5, p.z); b.hp = 99; await wait(400);
         G.facing = Math.atan2(-1, 0); G.pc.strike = null; G.strike(0); out.near = await follow(b); }
       return out;
     });
     const f = r.far || {}, n = r.near || {};
     wall('W10 the lock', !!(f.target && f.landed) && !errors.length, `a bandit 7 m away at 110°: the strike ${f.target ? 'went to him' : 'did NOT go to him'}, the blow ${f.landed ? 'landed' : 'missed'}`);
-    wall('W11 the leap', !!(f.lift >= 0.2 && f.lift <= 0.5 && f.slide <= 0.35 && f.landed && f.stride >= 0.6 && f.knee >= 150 && n.lift >= 0.05 && n.slide <= 0.35), `from 7 m: ${f.air} (${f.clip}), up ${f.lift} m (0.2-0.5: forward, not up), slid ${f.slide} m (≤ 0.35), at mid-flight a stride of ${f.stride} m (≥ 0.6) with a knee at ${f.knee}° (≥ 150: not a tuck) · from 3.5 m: ${n.air} (${n.clip}), up ${n.lift} m (≥ 0.05), slid ${n.slide} m (≤ 0.35)`);
+    const dashOk = f.clip === 'Sword_Dash' && f.lift <= 0.15 && f.knee !== null && f.knee <= KNEE_MAX && f.slide <= 0.35 && f.landed;
+    wall('W11 the dash', !!(dashOk && n.lift >= 0.05 && n.slide <= 0.35) && !errors.length, `from 7 m: ${f.air} (${f.clip}${f.D !== null ? `, ${f.D} m in ${f.T} s` : ''}), up ${f.lift} m (≤ 0.15: forward, not up), the front knee at mid-dash ${f.knee}° (≤ ${KNEE_MAX}: bent), a planted foot slid ${f.slide} m over ${f.frames} frames (≤ 0.35), the blow ${f.landed ? 'landed' : 'MISSED'} · from 3.5 m: ${n.air} (${n.clip}), up ${n.lift} m (≥ 0.05), a planted foot slid ${n.slide} m (≤ 0.35)`);
+    await page.close();
+  }
+
+  // W14 + W15: the guard and the chain. One bandit 1.6 m in front, engaged and facing the ronin, his guard certain and no blow of his own;
+  // the combo's first cut with the next press buffered during it. Read: what his guard did, and whether the second cut followed.
+  {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      G.bandits.feintChance = 0; G.pc.invuln = 99;
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+      const put = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.agent.resetMoveTarget(); };
+      camp.forEach((b) => { put(b, c.x - 9, c.y + 9); b.state = 'hold'; });
+      const b = camp[0], p = G.ronin.root.position; G.facing = Math.atan2(-1, 0); put(b, p.x - 1.6, p.z); b.hp = 99; b.cool = 99;
+      G.bandits.setState(b, 'engage'); await wait(700); b.cool = 99;
+      const facing = Math.round(Math.acos(Math.max(-1, Math.min(1, new T.Vector3(Math.sin(b.facing), 0, Math.cos(b.facing)).dot(p.clone().sub(b.root.position).setY(0).normalize())))) * 57.3);
+      const results = [], H = G.bandits.hit.bind(G.bandits); G.bandits.hit = (bb, ...a) => { const out = H(bb, ...a); if (bb === b) results.push(out); return out; };
+      G.bandits.blockChance = 1; G.facing = Math.atan2(-1, 0); G.pc.strike = null; G.strike(0);
+      // the clash clears a press made before it (a blocked cut interrupts the combo, by design); the press that must not be lost is the
+      // one made AFTER the clash, while the blocked cut recovers
+      for (let k = 0; k < 40 && !results.length; k++) await wait(10);
+      await wait(60); const pressedAt = G.pc.strike ? +(G.pc.strike.t - G.pc.strike.impact).toFixed(3) : null; G.pc.queued = true;
+      let second = false; for (let k = 0; k < 40; k++) { await wait(25); if (G.pc.strike && G.pc.strike.i === 1) { second = true; break; } }
+      G.bandits.blockChance = 0; G.bandits.hit = H;
+      return { first: results[0] || 'none', second, facing, state: b.state, pressedAt };
+    });
+    wall('W14 the guard', r.first === 'blocked' && !errors.length, `a bandit facing the ronin (${r.facing}° off) with his guard up, the combo's sideways first cut: ${r.first} (blocked)`);
+    wall('W15 the chain', r.second && !errors.length, `a press made after the clash (${r.pressedAt} s past the blocked cut's impact): the second cut ${r.second ? 'followed' : 'did NOT follow'}`);
     await page.close();
   }
 

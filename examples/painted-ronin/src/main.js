@@ -95,6 +95,7 @@ const clipdata = await (await fetch('assets/clipdata.json')).json();      // eve
 vfx.clipdata = clipdata;
 const bandits = new Bandits(scene, kit, navs, P, rest, land, { perCamp: Q.has('test') ? 1 : 4, frozen: PLANT === 'nav', clipdata });
 if (PLANT === 'budget') bandits.budgetOff = true;
+bandits.plant = PLANT;
 if (PLANT === 'ramp256') { const d = new Uint8Array(256).map((_, i) => i); const t = new THREE.DataTexture(d, 256, 1, THREE.RedFormat); t.needsUpdate = true; scene.getObjectByName('painted-rocks').material.gradientMap = t; }   // a smooth light: the bands gone
 // the painted fog on everything that takes fog, ending in the sky's own horizon colour, measured off the sky (and the clouds exposed to it)
 paintFogAll(scene);
@@ -113,21 +114,37 @@ const pc = { hp: 100, alive: true, queued: false, strike: null, roll: 0, invuln:
 // the combo, swift: cut, cut, a two-handed finisher; a strike while sprinting is a dash attack. Each strike's impact is MEASURED from
 // its clip; the next strike starts 166 ms after an impact that hit, 200 ms after one that missed (For Honor's cancel windows); a press
 // during a strike is buffered. Every strike goes to THE LOCK (lock.js: Arkham's Freeflow, God of War's targeting), and the ronin covers
-// the distance so the blade arrives at reach (motion warping, Unreal Engine's Motion Warping; God of War's attack magnetism) — in the
-// AIR, never sliding on the ground (the owner, 8 Nov: "sloppily sliding to them instead of jumping and attacking"):
+// the distance so the blade arrives at reach (motion warping, Unreal Engine's Motion Warping; God of War's attack magnetism), never
+// sliding on the ground (the owner, 8 Nov: "sloppily sliding to them instead of jumping and attacking"):
 //  · a gap of a metre or two: FUMIKOMI, kendo's lunging step — the cut's own clip, the body carried in a low arc that lands on the cut;
-//  · a longer gap, up to the lock's 12 m: TOBIKOMI, kendo's leaping strike (飛込み, "dive, jump, plunge"; Kendo-Guide: you throw your
-//    body at the opponent; tobikomi-men covers a longer distance at a higher speed than debana-men, Research Journal of Budo 52(2)). It
-//    goes FORWARD, NOT UP, the back straight (kendo.readthedocs.io, footwork: "kendo is trying to move forward instead of upward. Imagine
-//    an plane … flying in a low height"; "The back should be straight"): the legs held in a lunge's long stride (Mesh2Motion's
-//    spear-thrust, its lead foot the same as the overhead cut's stance), the overhead cut's arms, a low arc chosen by its height and its
-//    time (Kyle Pittman, GDC 2016, "Math for Game Programmers: Building a Better Jump"), landing ON the cut. The first version tucked
-//    both legs under a high arc — the owner, 8 Nov: "It looks like a frog rather than a leap to the enemy! … This is not a Samurai
-//    moves!" (plant frog).
+//  · a longer gap, up to the lock's 12 m: THE DASH ATTACK (research J §1; the owner, 8 Nov: "No front flip!" · "Just dash attack" ·
+//    "We don't want the guy to roll, just dash to the opponent with the leg bend dude"). Sekiro's Shadowrush is "a long range, powerful
+//    thrust" and Ninja Gaiden 4's Flying Swallow closes on a locked enemy about 2.3× faster than running; the body is a LUNGE, forward not
+//    up (kendo: "kendo is trying to move forward instead of upward"; fumikomi is "delivering your body forward" in one step), the blade and
+//    the body arriving together (ki-ken-tai-icchi; the fencers' "CG and blade moved simultaneously"). It is Quaternius's Sword_Dash, the
+//    WHOLE body as he authored it — the front knee closing to 58° as it drives in — carried as its own feet say (Daniel Holden's foot
+//    locking: a planted foot keeps "a static position on the floor which was the toe's location when the contact first became active"):
+//    over its planted left foot through the step, then on its planted front foot. The clip is authored in place and has no moment with
+//    both feet up, so the rest of the gap is flown LOW during the step and only there (Motion Warping's window ends on the strike; Unity's
+//    MatchTarget runs between two clip times; Epic's stride warping clamps a planted stride), the front foot landing with the cut. Two
+//    earlier approaches stay only as plants: the tucked jump ("It looks like a frog rather than a leap to the enemy!", plant frog) and the
+//    lunge-stride leap 0.2-0.5 m up ("The front leg knee needs to bend when this happens!", plant strideleap).
 const COMBO = [{ clip: 'Sword_Regular_A', power: 1, speed: 1.15 }, { clip: 'Sword_Regular_B', power: 1, speed: 1.15 }, { clip: 'two-handed-overhead-slam', power: 2, speed: 1.3 }];
 const DASH_STRIKE = { clip: 'Sword_Dash', power: 2, speed: 1.35 };
-const LEAP_STRIKE = { clip: 'two-handed-overhead-slam', power: 2, speed: 1, leap: true };
-const LEAP_GAP = 2.6, STEP_GAP = 0.5, TAKEOFF = 0.08;                 // metres to cover: above LEAP_GAP a leap, above STEP_GAP a lunge
+const LEAP_STRIKE = { clip: 'two-handed-overhead-slam', power: 2, speed: 1, leap: true };      // the plants' leap only
+const DASH_GAP = 2.6, STEP_GAP = 0.5, TAKEOFF = 0.08;                 // metres to cover: above DASH_GAP the dash, above STEP_GAP a lunge
+// Sword_Dash's step, in its 60 fps frames (measured on this rig, research J §1d): from frame 4 to frame 10 the left foot stays planted
+// while the body passes 0.75 m over it and the right foot swings through to land in front
+const DASH_STEP = [4, 10];
+// the dash's clock and height: an average under 14 m/s (Flying Swallow's ≈2.3× our 8 m/s run is ~18), never quicker than the clip's own
+// step; a flight at most 0.13 m up (forward, not up — no published number for a lunge's rise: ours, research J §1b)
+const dashTime = (D, speed) => Math.max((DASH_STEP[1] - DASH_STEP[0]) / 60 / speed, 0.1 + D / 14);
+const dashLift = (D) => THREE.MathUtils.clamp(0.05 + 0.012 * D, 0.06, 0.13);
+// the feet of a clip the game carries by them (assets/clipdata.json `feet`: [left x, z, y, right x, z, y] in the body's frame, 60 fps)
+const feetAt = (clip, tau) => { const f = clipdata[clip].feet, x = THREE.MathUtils.clamp(tau * 60, 0, f.length - 1), i = Math.min(f.length - 2, Math.floor(x)), k = x - i;
+  return f[i].map((v, j) => v + (f[i + 1][j] - v) * k); };
+// the root that puts a point of the body (lx across, lz ahead) on a world point w, the body facing f
+const rootFor = (w, f, lx, lz, out = new THREE.Vector3()) => out.set(w.x - (Math.cos(f) * lx + Math.sin(f) * lz), 0, w.z - (-Math.sin(f) * lx + Math.cos(f) * lz));
 const lock = createLock();
 const REACH = 1.5;
 let freeze = 0, trauma = 0, slow = 0;                                  // slow: seconds of slow motion left (the world at 0.3x)
@@ -160,8 +177,13 @@ function strike(i, def) {
   const target = strikeTarget(s === DASH_STRIKE);
   let C = contactOf(s.clip), reach = reachOf(C), air = null;
   const to = target ? new THREE.Vector3().subVectors(target.root.position, pos).setY(0) : null;
+  const oldLeap = PLANT === 'frog' || PLANT === 'strideleap';
   if (to && PLANT !== 'slide') {
-    if (to.length() - reach > LEAP_GAP) {                                 // tobikomi: a leap that lands on the overhead cut
+    if (!oldLeap && (to.length() - reach > DASH_GAP || (s === DASH_STRIKE && to.length() - reach > STEP_GAP))) {   // the dash attack
+      s = DASH_STRIKE; C = contactOf(s.clip); reach = reachOf(C);
+      const D = Math.max(0, to.length() - reach), tau0 = DASH_STEP[0] / 60, tau1 = DASH_STEP[1] / 60;
+      air = { kind: 'dash', tA: tau0 / s.speed, T: dashTime(D, s.speed), h: dashLift(D), tau0, tau1, landed: false, from: pos.clone(), D };
+    } else if (to.length() - reach > DASH_GAP) {                         // PLANTS ONLY: the old leap that lands on the overhead cut
       s = LEAP_STRIKE; C = contactOf(s.clip); reach = reachOf(C);
       const g = Math.max(0, to.length() - reach), frog = PLANT === 'frog';
       const T = frog ? THREE.MathUtils.clamp(0.4 + 0.04 * g, 0.48, 0.8) : THREE.MathUtils.clamp(0.24 + 0.05 * g, 0.3, 0.55);
@@ -173,17 +195,24 @@ function strike(i, def) {
       air = { kind: 'lunge', from: pos.clone(), tau: 0, T: C.t / s.speed, h: Math.min(0.12, 0.06 + 0.03 * g), landed: false };   // low: forward, not up
     }
   }
-  const impact = C.t / s.speed;
+  const dash = air && air.kind === 'dash';
+  // the dash's clock: the clip's own wind-in, the step stretched over the flight, then the clip at its speed to the cut and on
+  const impact = dash ? air.tA + air.T + (C.t - air.tau1) / s.speed : C.t / s.speed;
+  // the clip's end: a press buffered during it still chains (Sword_Regular_A ends 0.41 s in, before a blocked or missed cut's window at
+  // impact + 0.2 s: the buffered cut was dropped and no combo could go on past a block — found 8 Nov rehearsing the showcase's clash)
+  const onEnd = () => { const st = pc.strike; if (!st || st.def !== s) return; if (pc.queued && st.i >= 0 && st.i < 2 && PLANT !== 'dropchain') st.ended = true; else pc.strike = null; };
   const a = air && air.kind === 'leap'
     ? (PLANT === 'frog' ? ronin.playSplit(s.clip, 'NinjaJump_Start', { upperSpeed: s.speed, lowerSpeed: 1.5, fade: 0.06 })
       : ronin.playSplit(s.clip, 'spear-thrust', { upperSpeed: s.speed, lowerSpeed: 0.3, lowerAt: 0.42, fade: 0.06 }))
-    : ronin.play(s.clip, { loop: false, fade: 0.06, speed: s.speed, onEnd: () => { if (pc.strike && pc.strike.def === s) pc.strike = null; } });
+    : ronin.play(s.clip, { loop: false, fade: 0.06, speed: dash ? 0 : s.speed, onEnd });     // the dash's clip time is set frame by frame until it lands
   let lunge = 0;
   if (to) {                                                             // turn so the blade's contact point lies on the target, then close to it
-    facing = Math.atan2(to.x, to.z) - Math.atan2(C.off, C.reach);
+    const face = Math.atan2(to.x, to.z) - Math.atan2(C.off, C.reach);
+    if (dash) air.face = face; else facing = face;                      // the dash turns on its planted foot instead of snapping round
     lunge = Math.min(PLANT === 'slide' ? 12 : 5, Math.max(0, to.length() - reach) / Math.max(0.08, impact));
   } else if (s === DASH_STRIKE) lunge = 9;
-  pc.strike = { i, def: s, t: 0, dur: a.getClip().duration / s.speed, impact, contact: C, reach, hit: false, landed: false, lunge, target, air, lift: 0, groundSlide: 0 };
+  const dur = dash ? air.tA + air.T + (a.getClip().duration - air.tau1) / s.speed : a.getClip().duration / s.speed;
+  pc.strike = { i, def: s, t: 0, dur, impact, contact: C, reach, hit: false, landed: false, lunge, target, air, lift: 0, groundSlide: 0, act: a };
   pc.strike.arc = vfx.slashArc(ronin, s.clip, s.speed, impact, s.power > 1);
   sfx(s.power > 1 ? 'heavy' : 'swing');
 }
@@ -208,6 +237,42 @@ bandits.onKill = (b) => {
   if (pc.kills === TOTAL) { say('The valley is quiet.', 5000); slow = 1.2; }
   else if (bandits.list.filter((o) => o.nav === b.nav).every((o) => o.dead)) { say('陣 — the camp is cleared', 2600); slow = Math.max(slow, 1.0); }
 };
+
+// THE DASH, carried by its own feet (research J §1c-§1e). Through the step the body passes over its planted LEFT foot exactly as the clip
+// moves it, plus — only while the step is flown, never at the push-off or the landing when a foot is down — the rest of the way to where
+// the blade's contact point meets him (a smootherstep share, the flight at most A.h up). From the landing on, the body goes where its
+// planted FRONT foot says: the clip runs at its own speed to the cut and on, the foot still. It turns on the planted foot, never snapping.
+function dashCarry(st, dt) {
+  const A = st.air, s = st.def, C = st.contact, tgt = st.target && !st.target.dead ? st.target.root.position : null;
+  if (tgt && st.t < st.impact) { const d = new THREE.Vector3().subVectors(tgt, pos); A.face = Math.atan2(d.x, d.z) - Math.atan2(C.off, C.reach); }
+  if (A.face !== undefined && st.t < st.impact) { const d = A.face - facing; facing += Math.atan2(Math.sin(d), Math.cos(d)) * Math.min(1, dt * 25); }
+  if (!A.landed) {
+    const u = THREE.MathUtils.clamp((st.t - A.tA) / A.T, 0, 1);
+    const tau = st.t < A.tA ? st.t * s.speed : A.tau0 + (A.tau1 - A.tau0) * u;
+    st.act.time = tau;
+    if (!A.anchor) { const L0 = feetAt(s.clip, 0); A.anchor = new THREE.Vector3(pos.x + Math.cos(facing) * L0[0] + Math.sin(facing) * L0[1], 0, pos.z - Math.sin(facing) * L0[0] + Math.cos(facing) * L0[1]); }
+    const L = feetAt(s.clip, tau), flight = rootFor(A.anchor, facing, L[0], L[1]);
+    if (tgt) {
+      // where the root must stand as the front foot lands so that, after the clip's own settle on that foot, the contact point is on him
+      const L1 = feetAt(s.clip, A.tau1), Lc = feetAt(s.clip, C.t);
+      const landRoot = rootFor(tgt, facing, C.off * 0.92 + (L1[3] - Lc[3]), C.reach * 0.92 + (L1[4] - Lc[4]));
+      A.delta = landRoot.sub(rootFor(A.anchor, facing, L1[0], L1[1]));
+    }
+    if (A.delta) flight.addScaledVector(A.delta, u * u * u * (u * (u * 6 - 15) + 10));
+    flight.y = land.groundY(flight.x, flight.z) + (PLANT === 'flatdash' ? 0 : A.h * Math.sin(Math.PI * u));
+    st.lift = Math.max(st.lift, flight.y - land.groundY(flight.x, flight.z));
+    if (st.t >= A.tA + A.T) {                                              // the front foot lands: the clip runs on at its own speed
+      A.landed = true; flight.y = land.groundY(flight.x, flight.z);
+      st.act.time = A.tau1; st.act.setEffectiveTimeScale(s.speed);
+      const R = feetAt(s.clip, A.tau1);
+      A.anchorR = new THREE.Vector3(flight.x + Math.cos(facing) * R[3] + Math.sin(facing) * R[4], 0, flight.z - Math.sin(facing) * R[3] + Math.cos(facing) * R[4]);
+    }
+    return { flight, vx: 0, vz: 0 };
+  }
+  const tau = Math.min(st.act.getClip().duration, A.tau1 + (st.t - A.tA - A.T) * s.speed), R = feetAt(s.clip, tau);
+  const want = rootFor(A.anchorR, facing, R[3], R[4]), k = 1 / Math.max(dt, 1e-3);
+  return { flight: null, vx: (want.x - pos.x) * k, vz: (want.z - pos.z) * k };
+}
 
 // ── the specials: 閃 a dash that cuts a line (they fall a beat after the blade passes), 嵐 a storm of cuts all around ──
 function dashSpecial() {
@@ -313,13 +378,17 @@ function frame(now) {
   let flight = null;                                                      // where the body is carried this frame (a leap or a lunge), if it is
   if (pc.strike && pc.strike.air) {
     const st = pc.strike, A = st.air;
-    if (!A.landed) {
+    const carry = A.kind === 'dash' ? dashCarry(st, dt) : null;
+    if (!carry && !A.landed) {
       // the landing point follows the target (the warp target, updated every frame): on the line from where he jumped, at reach
       if (st.target && !st.target.dead) { const tp = st.target.root.position, d = new THREE.Vector3().subVectors(tp, A.from).setY(0), L = d.length(); A.land = A.from.clone().addScaledVector(d.normalize(), Math.max(0, L - st.reach)); }
       else if (!A.land) A.land = A.from.clone();
       const u = THREE.MathUtils.clamp((st.t - A.tau) / A.T, 0, 1);
       const y0 = A.from.y, y1 = land.groundY(A.land.x, A.land.z);
-      flight = new THREE.Vector3().lerpVectors(A.from, A.land, u); flight.y = y0 + (y1 - y0) * u + 4 * A.h * u * (1 - u);
+      // the lunge goes where its feet are up: little of the way while they are still down at the push-off and the landing (a smootherstep
+      // share, the height a half sine) — moved evenly, its planted feet slid 0.41 m (measured off the bones, wall W11, 8 Nov)
+      const lunge = A.kind === 'lunge', w = lunge ? u * u * u * (u * (u * 6 - 15) + 10) : u;
+      flight = new THREE.Vector3().lerpVectors(A.from, A.land, w); flight.y = y0 + (y1 - y0) * w + (lunge ? A.h * Math.sin(Math.PI * u) : 4 * A.h * u * (1 - u));
       st.lift = Math.max(st.lift, flight.y - land.groundY(flight.x, flight.z));
       if (st.t >= A.tau + A.T) {                                            // down: the feet land with the cut
         A.landed = true; flight.y = y1 + 0.02;
@@ -327,8 +396,9 @@ function frame(now) {
       }
       if (st.target && !st.target.dead) { const t2 = new THREE.Vector3().subVectors(st.target.root.position, flight); facing = Math.atan2(t2.x, t2.z) - Math.atan2(st.contact.off, st.contact.reach); }
     }
-    if (pc.queued && st.i >= 0 && st.i < 2 && A.landed && st.t >= st.impact + (st.landed ? 0.166 : 0.2)) strike(st.i + 1);
+    if (pc.queued && st.i >= 0 && st.i < 2 && A.landed && (st.t >= st.impact + (st.landed ? 0.166 : 0.2) || st.ended)) strike(st.i + 1);
     vel.set(0, 0); vx = vz = 0;
+    if (carry) { flight = carry.flight; vx = carry.vx; vz = carry.vz; }
   } else if (pc.strike) {                                                 // the warp: cover the gap to reach by the impact, then plant
     const st = pc.strike, fw = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
     if (st.t < st.impact && st.target && !st.target.dead) {                 // close exactly to the contact distance, along the line to the target
@@ -338,7 +408,7 @@ function frame(now) {
     vel.set(0, 0);
     if (st.target && !st.target.dead && st.t < st.impact) { const to = new THREE.Vector3().subVectors(st.target.root.position, pos); facing = Math.atan2(to.x, to.z) - Math.atan2(st.contact.off, st.contact.reach); }
     // the chain: a buffered press starts the next strike at impact +166 ms (a hit) or +200 ms (a miss)
-    if (pc.queued && st.i >= 0 && st.i < 2 && st.t >= st.impact + (st.landed ? 0.166 : 0.2)) strike(st.i + 1);
+    if (pc.queued && st.i >= 0 && st.i < 2 && (st.t >= st.impact + (st.landed ? 0.166 : 0.2) || st.ended)) strike(st.i + 1);
   }
   if (pc.knock && pc.knock.left > 0) { const step = Math.min(pc.knock.left, 4 * dt); pc.knock.left -= step; vx += pc.knock.dir.x * step / Math.max(dt, 1e-3); vz += pc.knock.dir.z * step / Math.max(dt, 1e-3); }
   pc.invuln -= dt;
@@ -374,7 +444,7 @@ function frame(now) {
         st.hit = true;
         const out = new THREE.Vector3().subVectors(bp, pos).setY(0).normalize();
         const dir = swing.clone().multiplyScalar(0.65).addScaledVector(out, 0.35).normalize();      // thrown along the cut, and away
-        const r = bandits.hit(b, dir, s.power, { breaksGuard: s.power > 1 });
+        const r = bandits.hit(b, dir, s.power, { breaksGuard: s.power > 1, from: pos });
         const at = new THREE.Vector3(closest.x, THREE.MathUtils.clamp(closest.y, bp.y + 0.6, bp.y + 1.7), closest.z);
         if (r === 'blocked') { sfx('clash'); vfx.hit(at, out.clone().negate(), false); freeze = 0.05; trauma = Math.min(1, trauma + 0.2); pc.queued = false; continue; }
         st.landed = true; sfx('cut'); pc.ki = Math.min(100, pc.ki + 12);

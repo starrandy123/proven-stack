@@ -43,9 +43,12 @@ export class Bandits {
 
   // ── the blow from the player ── power 1 (a cut), 2 (the finisher, a dash), 3 (a special); dir: where it pushes
   // returns 'blocked' when the bandit's guard took it
-  hit(b, dir, power, { breaksGuard = false, hold = false } = {}) {     // hold: a special's blow keeps them where they stand
+  // from: where the blow comes from (the attacker). A guard faces the man who strikes, not the way his cut pushes: judged from the push,
+  // a sideways cut never read as "in front", so no light cut was ever blocked (found 8 Nov, rehearsing the showcase's clash: research J §2)
+  hit(b, dir, power, { breaksGuard = false, hold = false, from = null } = {}) {     // hold: a special's blow keeps them where they stand
     if (b.dead) return 'dead';
-    const toPlayer = dir.clone().negate(), fwd = new THREE.Vector3(Math.sin(b.facing), 0, Math.cos(b.facing));
+    const toPlayer = from && this.plant !== 'guardpush' ? new THREE.Vector3().subVectors(from, b.root.position).setY(0).normalize() : dir.clone().negate();
+    const fwd = new THREE.Vector3(Math.sin(b.facing), 0, Math.cos(b.facing));
     const front = fwd.dot(toPlayer) > Math.cos(THREE.MathUtils.degToRad(60));
     if (front && !breaksGuard && power < 2 && (b.state === 'engage' || b.state === 'idle') && Math.random() < (this.blockChance ?? 0.28)) {
       this.setState(b, 'block'); b.play('weapon-block', { loop: false, fade: 0.06, speed: 1.6, onEnd: () => { if (b.state === 'block') this.setState(b, 'engage'); } });
@@ -63,7 +66,8 @@ export class Bandits {
     const clip = !front ? 'Hit_Head' : power > 1 ? 'Hit_Knockback' : 'Hit_Chest';
     b.play(clip, { loop: false, fade: 0.05, speed: 1.15, onEnd: () => {
       if (b.dead || b.state !== 'stagger') return;
-      if (!hold && Math.random() < 0.35) { this.setState(b, 'dodge'); b.dodgeDir = dir.clone(); b.play('dodge-back', { loop: false, fade: 0.08, speed: 1.4, onEnd: () => { if (b.state === 'dodge') this.setState(b, 'engage'); } }); }
+      // standsGround: a film's staging only (he never steps back out of a stagger)
+      if (!hold && !b.standsGround && Math.random() < 0.35) { this.setState(b, 'dodge'); b.dodgeDir = dir.clone(); b.play('dodge-back', { loop: false, fade: 0.08, speed: 1.4, onEnd: () => { if (b.state === 'dodge') this.setState(b, 'engage'); } }); }
       else this.setState(b, 'engage');
     } });
     return 'hit';

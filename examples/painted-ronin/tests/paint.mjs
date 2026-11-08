@@ -13,6 +13,10 @@
 //   S2 four tones   the sky's light sits on 3-5 tones (histogram peaks), not a smooth ramp (Gurney's mixes)       plant skyramp
 //   S3 strokes      the sky carries oil strokes (fine detail ≥ 0.06 % RMS: a smooth gradient reads 0) laid flat
 //                   (upright gradient energy ≥ 2× the sideways) (Yamamoto's flat brush; the oil pass needs them)  plants strokes0, strokes90
+//   S7 graded       the sky GRADES from the horizon up, no flat bands: blurred to the size the eye blends strokes at, wherever the
+//                   smooth sky under it still changes, the painted sky is flat (changing under a third as much) over ≤ S7_MAX of it
+//                   (research J §3: Gurney, "gradate from a more saturated blue at the top to a paler and warmer blue at the horizon";
+//                   Masuyama's soft edges; the owner, 8 Nov: "it's just light blue band to dark blue bands")   plant skybands
 //   C1 three tones  near cloud pixels sit on the three swatches' hues (≥ 65 %) (TF2's warp; Masuyama)            plant rampLinear
 //   C2 warm/cool    the shadow is bluer than the light ((B−R)/Σ ≥ 0.04) (Gooch; Raybould)                         plant rampGrey
 //   C3 lit side     facing away from the sun, the light band shows (≥ 15 % of a cloud) (Gurney 2007)             plant sunFlip
@@ -134,10 +138,21 @@ await page.evaluate(() => {
 {
   const r = await page.evaluate(() => {
     const { G, T, render, lum } = window.__P, m = new T.Matrix4(), p = new T.Vector3(), mesh = G.birds.mesh;
-    mesh.getMatrixAt(0, m); p.setFromMatrixPosition(m);
+    // the first CRANE (by its own attribute) ALONE and HELD STILL for the picture: its flock-mates set aside, its wings at one point of the
+    // beat, its body level. The whole flock was drawn, so whichever cranes drifted into the frame were counted as "the crane": 4,900 px
+    // in one run, 16,800-17,500 in the next (8 Nov), and the 5×5 bristle detail shrinks as the mask grows — the bound read the flock.
+    const geo = mesh.geometry, ph = geo.attributes.phase, cr = geo.attributes.crane;
+    let k = 0; if (cr) for (let i = 0; i < mesh.count; i++) if (cr.getX(i) > 0.5) { k = i; break; }
+    mesh.getMatrixAt(k, m); p.setFromMatrixPosition(m);
+    const keepPh = ph ? ph.getX(k) : null, sc = new T.Vector3(); m.decompose(new T.Vector3(), new T.Quaternion(), sc);
+    const keepAll = mesh.instanceMatrix.array.slice(), none = new T.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < mesh.count; i++) if (i !== k) mesh.setMatrixAt(i, none);
+    mesh.setMatrixAt(k, new T.Matrix4().compose(p, new T.Quaternion(), sc)); mesh.instanceMatrix.needsUpdate = true;
+    if (ph) { ph.setX(k, 0); ph.needsUpdate = true; }
     const cam = window.__P.camAt(p.clone().add(new T.Vector3(0.6, -4.2, 0.4)), p);
     const s = new T.Scene(), parent = mesh.parent; s.add(mesh);
     const { w, h, px } = render(s, cam); parent.add(mesh);
+    mesh.instanceMatrix.array.set(keepAll); mesh.instanceMatrix.needsUpdate = true; if (ph) { ph.setX(k, keepPh); ph.needsUpdate = true; }
     let x0 = w, y0 = h, x1 = 0, y1 = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 0.5) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     x0 = Math.max(0, x0 - 8); y0 = Math.max(0, y0 - 8); x1 = Math.min(w - 1, x1 + 8); y1 = Math.min(h - 1, y1 + 8);
     const W0 = w, cw = Math.max(1, x1 - x0 + 1), ch = Math.max(1, y1 - y0 + 1), cpx = new Float32Array(cw * ch * 4);
@@ -211,6 +226,24 @@ await page.evaluate(() => {
     // from the detail's own gradients: horizontal strokes put their energy in the upright gradient.
     const keepTones = SU.paintTones.value; SU.paintTones.value = 0;
     const sk = render(G.scene, cam); SU.paintTones.value = keepTones; SU.cloudCoverage.value = sheet; rt.dispose();
+    // S7: graded, not banded. Both skies — the painted one and the same sky with its tones off (Preetham's own gradient, the strokes kept)
+    // — blurred to the size the eye blends strokes at (a box ±2.5 % of the width, ±1.5 % of the height); then, down each column below the
+    // band, every row where the smooth sky still changes (≥ 0.3 L* over 2 % of the picture's height) is FLAT in the painted sky when the
+    // painted sky changes there by less than a third as much. A banded sky is flat over most of each step, a graded one almost nowhere.
+    const blurL = (P) => { const Lm = new Float32Array(w * h), Hb = new Float32Array(w * h), Bl = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) Lm[i] = Lstar(lum(P, i));
+      for (let y = 0; y < h; y++) { let a = 0; for (let x = -rx; x <= rx; x++) a += Lm[y * w + Math.min(w - 1, Math.max(0, x))];
+        for (let x = 0; x < w; x++) { Hb[y * w + x] = a / (2 * rx + 1); a += Lm[y * w + Math.min(w - 1, x + rx + 1)] - Lm[y * w + Math.max(0, x - rx)]; } }
+      for (let x = 0; x < w; x++) { let a = 0; for (let y = -ry; y <= ry; y++) a += Hb[Math.min(h - 1, Math.max(0, y)) * w + x];
+        for (let y = 0; y < h; y++) { Bl[y * w + x] = a / (2 * ry + 1); a += Hb[Math.min(h - 1, y + ry + 1) * w + x] - Hb[Math.max(0, y - ry) * w + x]; } }
+      return Bl; };
+    const rx = Math.max(2, Math.round(w * 0.025)), ry = Math.max(2, Math.round(h * 0.015)), dy = Math.max(2, Math.round(h * 0.02));
+    const Pb = blurL(px), Sb = blurL(sk.px), y1 = Math.floor(h * 0.7) - ry - dy; let flat = 0, counted = 0, maxP = 0, maxS = 0;
+    for (let x = rx; x < w - rx; x += 6) for (let y = ry; y < y1; y++) {
+      const cp = Math.abs(Pb[(y + dy) * w + x] - Pb[y * w + x]), cs = Math.abs(Sb[(y + dy) * w + x] - Sb[y * w + x]);
+      maxP = Math.max(maxP, cp); maxS = Math.max(maxS, cs);
+      if (cs >= 0.3) { counted++; if (cp < cs / 3) flat++; }
+    }
     G.clouds.mesh.visible = true; G.birds.mesh.visible = true;
     const L = new Float32Array(w * h); for (let i = 0; i < w * h; i++) L[i] = lum(sk.px, i);
     const D = new Float32Array(w * h);
@@ -218,10 +251,12 @@ await page.evaluate(() => {
     let sq = 0, n = 0, gx2 = 0, gy2 = 0;
     for (let y = 3; y < Math.floor(h * 0.7); y++) for (let x = 3; x < w - 3; x++) { const i = y * w + x; sq += D[i] * D[i]; n++; const gx = D[i + 1] - D[i - 1], gy = D[i + w] - D[i - w]; gx2 += gx * gx; gy2 += gy * gy; }
     return { w, h, top: +top.toFixed(1), mid: +mid.toFixed(1), mura: +(esd * 100).toFixed(2), edgeAt: +(em * 100).toFixed(1), peaks: peaks.length, near: +(near / vals.length).toFixed(2),
-      detail: Math.sqrt(sq / n), upright: gy2 / Math.max(gx2, 1e-12) };
+      detail: Math.sqrt(sq / n), upright: gy2 / Math.max(gx2, 1e-12), flat: +(flat / Math.max(1, counted)).toFixed(3), maxP: +maxP.toFixed(2), maxS: +maxS.toFixed(2) };
   });
   wall('S1 bokashi', r.top <= r.mid - 10 && r.mura >= 0.4, `the top 6 % at L* ${r.top} against ${r.mid} 25-35 % down (−10); its edge ${r.edgeAt} % down, wandering ${r.mura} % of the height (≥ 0.4)`);
   wall('S2 four tones', r.peaks >= 3 && r.peaks <= 5 && r.near >= 0.6, `${r.peaks} tones in the sky's light (3-5), ${Math.round(r.near * 100)} % of it on them (≥ 60 %)`);
+  const S7_MAX = 0.3;
+  wall('S7 graded', r.flat <= S7_MAX, `where the smooth sky still changes, the painted sky is flat over ${Math.round(r.flat * 100)} % of it (≤ ${Math.round(S7_MAX * 100)} %: graded, not banded) · its largest change over 2 % of the height ${r.maxP} L* (the smooth sky's ${r.maxS})`);
   wall('S3 strokes', r.detail >= 0.0006 && r.upright >= 2, `the sky's stroke layer: fine detail ${(r.detail * 100).toFixed(3)} % RMS (≥ 0.06 %), upright gradient energy ${r.upright.toFixed(1)}× the sideways (≥ 2: laid flat)`);
 }
 

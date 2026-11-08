@@ -221,7 +221,7 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
     const m = new THREE.Mesh(g, arcMat(heavy)); m.frustumCulled = false; m.renderOrder = 5;
     // carried by the ronin while the blade swings (he may still be closing in), then left in the world where it was painted
     person.root.add(m);
-    const arc = { m, t: 0, start: j0 / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.45, detached: false, src: { d, j0, n, heavy }, cutAt: cf - j0, press: 1 };
+    const arc = { m, t: 0, start: impact - (cf - j0) / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.45, detached: false, src: { d, j0, n, heavy }, cutAt: cf - j0, press: 1 };
     shapeArc(arc); arcs.push(arc);
     return arc;
   }
