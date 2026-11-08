@@ -35,10 +35,28 @@ const data = await page.evaluate(() => {
       if (speed[i] >= 0.55 * top && speed[i] >= speed[i - 1] && speed[i] >= speed[i + 1] && speed[i] >= speed[i - 2] && speed[i] >= speed[i + 2]
         && (!hits.length || i / 60 - hits[hits.length - 1] > 0.18)) hits.push(+(i / 60).toFixed(3));
     }
-    out[name] = { duration: +dur.toFixed(3), hits, topSpeed: +top.toFixed(2), tip, base };
+    // the CONTACT: while the blade is fast (35% of its top speed or more), the frame where its tip crosses in front of the body
+    // (ahead, z > 0.3 m) closest to the centreline, preferring torso height. A target that stands THERE is cut; the speed peak alone
+    // can be the wind-up (the two-handed swing's peak is overhead at 2 m)
+    let best = -1, score = 1e9;
+    for (const torso of [true, false]) {                             // torso height first (0.6-1.8 m); any height only if it never passes there
+      for (let i = 1; i < tip.length - 1; i++) {
+        const [x, y, z] = tip[i]; if (speed[i] < 0.35 * top || z < 0.3 || (torso && (y < 0.6 || y > 1.8))) continue;
+        const sc = Math.abs(x) + 0.3 * Math.abs(y - 1.15);
+        if (sc < score) { score = sc; best = i; }
+      }
+      if (best > 0) break;
+    }
+    let contact = null;
+    if (best > 0) {
+      const p0 = tip[best - 1], p1 = tip[best + 1];
+      contact = { t: +(best / 60).toFixed(3), frame: best, tip: tip[best], reach: +tip[best][2].toFixed(3), off: +tip[best][0].toFixed(3),
+        swing: [0, 1, 2].map((k) => +((p1[k] - p0[k]) * 30).toFixed(2)) };
+    }
+    out[name] = { duration: +dur.toFixed(3), hits, contact, topSpeed: +top.toFixed(2), tip, base };
   }
   return out;
 });
 await browser.close(); server.close();
 fs.writeFileSync(path.join(GAME, 'assets', 'clipdata.json'), JSON.stringify(data));
-for (const [k, v] of Object.entries(data)) console.log(k.padEnd(22), 'dur', v.duration, 'hits', JSON.stringify(v.hits), 'tip speed max', v.topSpeed, 'm/s');
+for (const [k, v] of Object.entries(data)) console.log(k.padEnd(28), 'dur', v.duration, 'contact', v.contact ? `${v.contact.t}s reach ${v.contact.reach} off ${v.contact.off} h ${v.contact.tip[1]} swing [${v.contact.swing}]` : 'none');

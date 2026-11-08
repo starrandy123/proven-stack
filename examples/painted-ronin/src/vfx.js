@@ -81,6 +81,17 @@ export function createVfx(scene, { phone = false } = {}) {
     ps.addBehavior(new SizeOverLife(new PiecewiseBezier([[new Bezier(1, 0.9, 0.5, 0.1), 0]])));
     ps.addBehavior(new ColorOverLife(new Gradient([[new QV3(1, 0.9, 0.6), 0], [new QV3(0.8, 0.25, 0.05), 1]], [[1, 0], [0, 1]])));
     ps.emitter.position.copy(at); ps.emitter.rotation.x = -Math.PI / 2; scene.add(ps.emitter); batch.addSystem(ps);
+    const smoke = new ParticleSystem({                                      // smoke rising off the fire, drifting with the wind
+      duration: 3, looping: true, worldSpace: true, maxParticle: phone ? 18 : 34,
+      startLife: new IntervalValue(3.5, 5.5), startSpeed: new IntervalValue(0.5, 0.9), startSize: new IntervalValue(0.6, 1.1),
+      startColor: new ColorRange(V4(0.45, 0.42, 0.4, 0.35), V4(0.6, 0.57, 0.52, 0.3)), emissionOverTime: new ConstantValue(phone ? 4 : 7),
+      shape: new ConeEmitter({ radius: 0.3, angle: 0.15 }),
+      material: new THREE.MeshBasicMaterial({ map: dot, transparent: true, depthWrite: false }), renderMode: RenderMode.BillBoard,
+    });
+    smoke.addBehavior(new SizeOverLife(new PiecewiseBezier([[new Bezier(0.6, 1.4, 2.4, 3.2), 0]])));
+    smoke.addBehavior(new ApplyForce(new QV3(1, 0.2, 0.4), new ConstantValue(0.25)));
+    smoke.addBehavior(new ColorOverLife(new Gradient([[new QV3(0.55, 0.52, 0.48), 0], [new QV3(0.75, 0.73, 0.7), 1]], [[0, 0], [0.4, 0.15], [0, 1]])));
+    smoke.emitter.position.copy(at).add(new THREE.Vector3(0, 0.9, 0)); smoke.emitter.rotation.x = -Math.PI / 2; scene.add(smoke.emitter); batch.addSystem(smoke);
     const light = new THREE.PointLight('#ff9a4a', 6, 12, 1.6); light.position.copy(at).add(new THREE.Vector3(0, 1, 0)); scene.add(light);
     return { ps, light };
   }
@@ -150,41 +161,66 @@ export function createVfx(scene, { phone = false } = {}) {
   // a slash arc (Gabriel Aguiar's crescent-mesh method), shaped from the blade's REAL path: the base and the tip of the sword through
   // the strike, sampled at 60 Hz off the clip (assets/clipdata.json). It draws itself as the blade passes, then fades. Gold-white at
   // the cutting edge, red ink toward the hilt, the dry-brush texture through it: a stroke of paint, in the game's own look.
+  // the slash as a BRUSH STROKE: a loaded brush dragged through the cut — bristle streaks along the stroke, dry gaps, a heavy start
+  // that thins to a flick, flecks thrown off its tail. Painted once on a canvas; laid on a crescent shaped from the blade's real path
+  // around the CONTACT (assets/clipdata.json), so the stroke passes through the body it cuts.
+  const paintTex = (() => {
+    const W = 1024, H = 192, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    for (let i = 0; i < 140; i++) {                                   // bristles: each a streak that starts loaded and dries out
+      const y0 = H * (0.22 + 0.56 * Math.random()), w = 1.5 + Math.random() * 6, dry = 0.5 + Math.random() * 0.5;
+      const x0 = 20 + Math.random() * 90, x1 = W * (0.62 + 0.36 * Math.random()), wob = (Math.random() - 0.5) * 14;
+      for (let x = x0; x < x1; x += 2.5) {
+        const t = (x - x0) / (x1 - x0); if (Math.random() > dry + (1 - t) * 0.45) continue;
+        const taper = Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.05 + 0.05)), 0.5) * (1 - 0.55 * t);
+        g.fillStyle = `rgba(255,255,255,${(0.5 + 0.5 * Math.random()) * (0.4 + 0.6 * (1 - t))})`;
+        g.fillRect(x, y0 + wob * Math.sin(t * 3.1) - w * taper / 2, 2.8, Math.max(0.6, w * taper));
+      }
+    }
+    for (let i = 0; i < 26; i++) {                                    // flecks flung off the tail
+      const x = W * (0.7 + 0.28 * Math.random()), y = H * (0.15 + 0.7 * Math.random()), r = 1.5 + Math.random() * 4.5;
+      g.fillStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.random()})`; g.beginPath(); g.arc(x, y, r, 0, 6.29); g.fill();
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
   const arcs = [], arcMat = (heavy) => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    uniforms: { progress: { value: 0 }, fade: { value: 1 }, brush: { value: brushTex }, heavy: { value: heavy ? 1 : 0 } },
+    uniforms: { progress: { value: 0 }, fade: { value: 1 }, paint: { value: paintTex }, heavy: { value: heavy ? 1 : 0 } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform float progress; uniform float fade; uniform sampler2D brush; uniform float heavy; varying vec2 vUv;
+    fragmentShader: `uniform float progress; uniform float fade; uniform sampler2D paint; uniform float heavy; varying vec2 vUv;
       void main(){
-        float lead = smoothstep(progress, progress - 0.18, vUv.x);                 // drawn up to the blade, a soft leading edge
-        float tail = smoothstep(0.0, 0.12, vUv.x);
-        float b = texture2D(brush, vec2(vUv.x * 0.92 + 0.04, vUv.y)).a;
-        float edge = smoothstep(0.0, 0.4, vUv.y) * (1.0 - smoothstep(0.94, 1.0, vUv.y));
-        vec3 ink = mix(vec3(0.42, 0.04, 0.03), vec3(0.08, 0.03, 0.03), heavy * 0.5);
-        vec3 col = mix(ink, vec3(1.0, 0.94, 0.78), smoothstep(0.55, 0.95, vUv.y));
-        float a = lead * tail * edge * (0.55 + 0.45 * b) * fade;
-        if (a < 0.02) discard;
-        gl_FragColor = vec4(col * 1.15, min(1.0, a * 1.1));
+        float drawn = smoothstep(progress, progress - 0.12, vUv.x);                // laid down as the blade passes
+        vec4 p = texture2D(paint, vec2(vUv.x, vUv.y));
+        if (p.a < 0.04) discard;
+        vec3 cream = vec3(0.97, 0.93, 0.84), crimson = vec3(0.62, 0.07, 0.05), ink = vec3(0.12, 0.04, 0.04);
+        vec3 col = heavy > 0.5 ? mix(ink, crimson, smoothstep(0.25, 0.75, vUv.y)) : mix(crimson, cream, smoothstep(0.35, 0.8, vUv.y));
+        col *= 0.85 + 0.3 * p.r;                                                    // the bristles' own light and dark
+        float a = drawn * p.a * fade;
+        if (a < 0.03) discard;
+        gl_FragColor = vec4(col, min(1.0, a * 1.15));
       }` });
   function slashArc(person, clip, speed, impact, heavy) {
-    const d = this && this.clipdata ? this.clipdata[clip] : api.clipdata && api.clipdata[clip]; if (!d || !d.hits.length) return;
-    const ki = Math.round(d.hits[0] * 60), j0 = Math.max(0, ki - 10), j1 = Math.min(d.tip.length - 1, ki + 5), n = j1 - j0 + 1;
+    const d = api.clipdata && api.clipdata[clip]; if (!d) return;
+    const cf = d.contact ? d.contact.frame : Math.round(d.hits[0] * 60);
+    const j0 = Math.max(0, cf - 10), j1 = Math.min(d.tip.length - 1, cf + 6), n = j1 - j0 + 1;
     if (n < 3) return;
     const pos = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx = [];
     for (let j = 0; j < n; j++) {
       const b = d.base[j0 + j], t = d.tip[j0 + j];
-      const inner = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * 0.2), outer = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * (heavy ? 1.7 : 1.45));
+      const inner = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * 0.25), outer = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * (heavy ? 1.55 : 1.35));
       pos.set(inner, j * 6); pos.set(outer, j * 6 + 3); uv.set([j / (n - 1), 0, j / (n - 1), 1], j * 4);
       if (j < n - 1) { const a = j * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
-    const m = new THREE.Mesh(g, arcMat(heavy)); m.frustumCulled = false; m.renderOrder = 5; person.root.add(m);
-    arcs.push({ m, t: 0, start: j0 / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.24 });
+    const m = new THREE.Mesh(g, arcMat(heavy)); m.frustumCulled = false; m.renderOrder = 5;
+    // carried by the ronin while the blade swings (he may still be closing in), then left in the world where it was painted
+    person.root.add(m);
+    arcs.push({ m, t: 0, start: j0 / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.45, detached: false });
   }
   function arcUpdate(dt) {
     for (let i = arcs.length - 1; i >= 0; i--) {
       const a = arcs[i]; a.t += dt; const u = a.m.material.uniforms;
       u.progress.value = THREE.MathUtils.clamp((a.t - a.start) / a.swing, 0, 1) * 1.18;
       const after = a.t - a.start - a.swing; u.fade.value = after > 0 ? Math.max(0, 1 - after / a.fadeT) : 1;
+      if (!a.detached && after >= 0) { scene.attach(a.m); a.detached = true; }
       if (after > a.fadeT) { a.m.removeFromParent(); a.m.geometry.dispose(); a.m.material.dispose(); arcs.splice(i, 1); }
     }
   }

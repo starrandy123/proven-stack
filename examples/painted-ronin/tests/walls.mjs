@@ -7,6 +7,8 @@
 //   W5 phone     — at a phone's size the page's own memory count stays under 192 MB (NotesMosaic's ceiling)
 //   W6 dash      — 閃: two bandits standing in the blade's line both fall
 //   W7 storm     — 嵐: the bandits around the ronin fall, those beyond its reach stand
+//   W9 contact   — at each strike's impact the REAL sword tip (read off the skeleton, not the clip data) is inside the bandit's body:
+//                  within 0.6 m of his axis, between knee and head height, three strikes of the combo
 //   W8 turns     — four bandits fight him 8 s: the attack budget is never overspent (≤ 10: two cuts, or a combo and a cut), never
 //                  more than two strike at once, and no two impacts land under 300 ms apart (Kingdoms of Amalur; Ghost of Tsushima)
 //   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee]   (a plant must turn its wall red: exit 1)
@@ -117,6 +119,43 @@ async function open(query, viewport = { width: 960, height: 540 }) {
     });
     wall('W8 turns', r.maxSpent <= 10 && r.maxAttackers <= 2 && r.minGap >= 0.29 && r.impacts >= 3 && !errors.length,
       `budget peak ${r.maxSpent}/10 · at most ${r.maxAttackers} striking at once · ${r.impacts} impacts, closest ${r.minGap} s apart`);
+    await page.close();
+  }
+
+  // W9: the blade connects (each strike of the combo on a bandit standing 3.5 m in front of the ronin)
+  {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      G.bandits.blockChance = 0; G.bandits.feintChance = 0;
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+      for (const b of camp) b.state = 'hold';
+      const away = (b) => { const { point } = b.nav.query.findClosestPoint({ x: c.x - 9, y: G.land.groundY(c.x - 9, c.y + 9), z: c.y + 9 }); b.agent.teleport(point); b.state = 'hold'; };
+      camp.forEach(away);                                                // bystanders out of the aim's 6 m: each strike has one target
+      const out = [];
+      for (let k = 0; k < 3; k++) {
+        const b = camp[k]; b.hp = 99; const p = G.ronin.root.position;
+        const { point } = b.nav.query.findClosestPoint({ x: p.x - 3.5, y: p.y, z: p.z }); b.agent.teleport(point); b.state = 'hold';
+        await wait(250); G.facing = Math.atan2(-1, 0); G.pc.strike = null;
+        G.strike(k);
+        // the real blade's closest pass to his axis over the contact window (impact −50 ms … +70 ms), every rendered frame: a fast
+        // swing moves the tip a metre in one frame, so the cut is judged on its sweep, as the eye sees it
+        const res = await new Promise((ok) => { let best = { d: 9, h: 0 }; const tick = () => { const st = G.pc.strike;
+          if (!st) return ok(best.d < 9 ? { ...best, clip: 'ended' } : null);
+          if (st.t >= st.impact - 0.05) {
+            const tip = new T.Vector3(); G.ronin.sword.userData.tip.getWorldPosition(tip); const base = new T.Vector3(); G.ronin.sword.userData.base.getWorldPosition(base);
+            const bp = b.root.position;
+            for (let i = 0; i <= 10; i++) { const q = base.clone().lerp(tip, i / 10); const dd = Math.hypot(q.x - bp.x, q.z - bp.z); const hh = q.y - bp.y; if (hh > 0.25 && hh < 1.95 && dd < best.d) best = { d: +dd.toFixed(2), h: +hh.toFixed(2) }; }
+          }
+          if (st.t >= st.impact + 0.07) return ok({ ...best, clip: st.def.clip });
+          requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
+        out.push(res); await wait(900); away(b);
+      }
+      return out;
+    });
+    const ok = r.every((x) => x && x.d <= 0.6);
+    wall('W9 contact', ok && !errors.length, r.map((x) => x ? `${x.clip.replace('Sword_Regular_', '')}: blade ${x.d} m from his axis at ${x.h} m high` : 'no strike').join(' · '));
     await page.close();
   }
 

@@ -11,7 +11,7 @@ import { Person } from './characters.js';
 import { Ragdoll } from './ragdoll.js';
 
 const TINTS = ['#ffffff', '#e8d2b0', '#c9b8a6', '#d6c3a0'].map((c) => new THREE.Color(c));
-const RING = 4.2, REACH = 1.5, BUDGET = 10, COST = { cut: 4, combo: 6, heavy: 4 }, SPACING = 0.3;
+const RING = 4.2, REACH = 1.2, BUDGET = 10, COST = { cut: 4, combo: 6, heavy: 4 }, SPACING = 0.3;
 const ATTACKS = {                                  // clip, cost, the wind-up to the FIRST impact (s); impacts are the clip's own
   cutA: { clip: 'Sword_Regular_A', kind: 'cut', windup: 0.5 },
   cutB: { clip: 'Sword_Regular_B', kind: 'cut', windup: 0.5 },
@@ -32,7 +32,7 @@ export class Bandits {
         const want = new THREE.Vector3(nav.center.x + Math.cos(a) * r, 0, nav.center.y + Math.sin(a) * r); want.y = land.groundY(want.x, want.z);
         const { point } = nav.query.findClosestPoint(want);
         const agent = nav.crowd.addAgent(point, { radius: 0.42, height: 1.8, maxAcceleration: 18, maxSpeed: frozen ? 0 : 5.2, collisionQueryRange: 2.5, pathOptimizationRange: 12, separationWeight: 2.6 });
-        Object.assign(b, { agent, nav, home: new THREE.Vector3(point.x, point.y, point.z), state: 'idle', hp: 4, cool: 1 + Math.random(), facing: Math.random() * 6.28,
+        Object.assign(b, { agent, nav, home: new THREE.Vector3(point.x, point.y, point.z), state: 'idle', hp: 2, cool: 1 + Math.random(), facing: Math.random() * 6.28,
           repath: 0, slot: -1, orbit: Math.random() < 0.5 ? -1 : 1, posture: 0, flinch: { a: 0, v: 0, axis: new THREE.Vector3(1, 0, 0) }, frozen });
         b.root.position.copy(b.home); scene.add(b.root); this.list.push(b);
       }

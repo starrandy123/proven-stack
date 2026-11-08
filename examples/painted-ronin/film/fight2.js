@@ -3,7 +3,7 @@
 // the fight, not his death), but the bandits' blows still land on him: both sides move.
 const G = window.__GAME, T = G.THREE, c = G.land.spots.camps[0];
 const x = c.x + 15, z = c.y + 3; G.player.setPosition(x, G.land.groundY(x, z) + 0.3, z);
-G.facing = Math.atan2(-15, -3); G.cam.yaw = Math.atan2(15, 3) - 0.5; G.cam.pitch = 0.3; G.cam.dist = 7.4;
+G.facing = Math.atan2(-15, -3); G.cam.yaw = Math.atan2(15, 3) - 0.5; G.cam.pitch = 0.24; G.cam.dist = 6.2;
 const k = (code, down) => window.__keys(code, down);
 const done = {}; const once = (key, at, t, f) => { if (t >= at && !done[key]) { done[key] = 1; f(); } };
 window.__film = (t) => {
