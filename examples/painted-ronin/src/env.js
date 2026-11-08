@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addStaticCylinder, addStaticBox } from './physics.js';
+import { RAMP, col, paintSurface, WIND } from './paint.js';
 
 const loader = new GLTFLoader();
 const load = (url) => new Promise((ok, no) => loader.load(url, ok, undefined, no));
@@ -75,7 +76,7 @@ export async function buildEnvironment(scene, land, P) {
   }
   const bamHolder = new THREE.Group(); bamHolder.add(bamboo.scene); instanced(bamHolder, bam, scene);
 
-  // rocks: noise-displaced stones in a painter's warm grey
+  // rocks: noise-displaced stones, painted: three bands of light (the one ramp) and oil strokes laid on them in the world (the one atlas)
   const rockGeo = new THREE.IcosahedronGeometry(1, 2), pos = rockGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) { const v = new THREE.Vector3().fromBufferAttribute(pos, i); const n = 0.75 + 0.35 * Math.sin(v.x * 3.1 + v.y * 1.7) * Math.cos(v.z * 2.3); v.multiplyScalar(n); v.y *= 0.7; pos.setXYZ(i, v.x, v.y, v.z); }
   rockGeo.computeVertexNormals();
@@ -85,21 +86,23 @@ export async function buildEnvironment(scene, land, P) {
     const y = land.groundY(x, z); rocks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y + s * 0.15, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(r(), r() * 6, r())), new THREE.Vector3(s, s, s)));
     placed.push({ x, z, r: s }); obstacles.push({ x, z, r: s * 0.9, h: s }); addStaticBox(P, new THREE.Vector3(x, y + s * 0.3, z), new THREE.Vector3(s * 0.75, s * 0.55, s * 0.75)); i++;
   }
-  const rockMesh = new THREE.InstancedMesh(rockGeo, new THREE.MeshStandardMaterial({ color: '#8a8378', roughness: 1, flatShading: true }), rocks.length);
+  const rockMesh = new THREE.InstancedMesh(rockGeo, paintSurface(new THREE.MeshToonMaterial({ color: col('stone'), gradientMap: RAMP }), { region: 'field_a', scale: 0.9, strength: 0.5, band: 0.4 }), rocks.length);
+  rockMesh.name = 'painted-rocks';
   rocks.forEach((m, i) => rockMesh.setMatrixAt(i, m)); rockMesh.castShadow = rockMesh.receiveShadow = true; scene.add(rockMesh);
 
   // the camps: a fire ring, war banners (sashimono) on poles, a lantern
   const camps = S.camps.map((c, ci) => {
     const y = land.groundY(c.x, c.y), group = new THREE.Group(); group.position.set(c.x, y, c.y); scene.add(group);
-    const stones = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.22), new THREE.MeshStandardMaterial({ color: '#5d5750', roughness: 1, flatShading: true }), 10);
+    const stones = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.22, 1), paintSurface(new THREE.MeshToonMaterial({ color: col('stoneShade'), gradientMap: RAMP }), { region: 'field_a', scale: 2.4, strength: 0.5, band: 0.4 }), 10);
     for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; stones.setMatrixAt(i, new THREE.Matrix4().makeTranslation(Math.cos(a) * 0.8, 0.1, Math.sin(a) * 0.8)); }
     group.add(stones);
     for (let i = 0; i < 4; i++) {
       const a = i / 4 * Math.PI * 2 + 0.4, bx = Math.cos(a) * 7, bz = Math.sin(a) * 7, by = land.groundY(c.x + bx, c.y + bz) - y;
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 4.2, 6), new THREE.MeshStandardMaterial({ color: '#2b2017', roughness: 0.9 }));
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 4.2, 6), new THREE.MeshToonMaterial({ color: col('ink'), gradientMap: RAMP }));
       pole.position.set(bx, by + 2.1, bz); group.add(pole);
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.9, 1, 8), new THREE.MeshStandardMaterial({ color: ci === 1 ? '#1d1d1f' : '#9e1b16', roughness: 0.8, side: THREE.DoubleSide }));
-      flag.position.set(bx + 0.36, by + 3.0, bz); flag.userData.wave = r() * 6; group.add(flag);
+      // a banner flies downwind (the one wind): its width laid along it, its cloth painted with the atlas's oil strokes
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.9, 1, 8), paintSurface(new THREE.MeshToonMaterial({ color: col(ci === 1 ? 'ink' : 'crimson'), gradientMap: RAMP, side: THREE.DoubleSide }), { region: 'field_b', scale: 2.2, strength: 0.4, band: 0.3 }));
+      flag.position.set(bx + WIND.x * 0.36, by + 3.0, bz + WIND.z * 0.36); flag.userData.wave = r() * 6; flag.userData.base = Math.atan2(-WIND.z, WIND.x); flag.rotation.y = flag.userData.base; group.add(flag);
       group.userData.flags = (group.userData.flags || []).concat(flag);
       addStaticCylinder(P, new THREE.Vector3(c.x + bx, y + by + 2, c.y + bz), 2, 0.08);
       obstacles.push({ x: c.x + bx, z: c.y + bz, r: 0.15, h: 4 });

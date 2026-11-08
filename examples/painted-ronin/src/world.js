@@ -1,6 +1,7 @@
 // The land: one height function (FastNoiseLite, MIT, Jordan Peck; the noise behind Godot's FastNoiseLite class) read by the
 // terrain mesh, by Jolt's height field and by everything placed on the ground, so what you see is what you stand on.
 import * as THREE from 'three';
+import { RAMP, paintSurface } from './paint.js';
 import FastNoiseLite from 'fastnoise-lite';
 
 export const N = 256, SPACING = 2, HALF = (N - 1) * SPACING / 2;     // 510 m across, a sample every 2 m
@@ -91,7 +92,9 @@ export function terrainMesh(land) {
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
+  // the ground, painted: three bands of light (the one ramp) and oil strokes laid on it in the world (the one atlas), never a flat digital field
+  const m = new THREE.Mesh(g, paintSurface(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: RAMP }), { region: 'field_a', scale: 0.32, strength: 0.42, band: 0.3 }));
+  m.name = 'painted-ground';
   m.receiveShadow = true;
   return m;
 }

@@ -1,0 +1,128 @@
+{
+ "size": 1024,
+ "channels": "RGB = bristle value (grey: the brush's own light and dark); A = coverage",
+ "regions": {
+  "stroke_cut": {
+   "rect": [
+    0,
+    0,
+    1,
+    0.25
+   ],
+   "tile": null,
+   "brush": "classic_dry_brush",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "stroke_ink": {
+   "rect": [
+    0,
+    0.25,
+    1,
+    0.25
+   ],
+   "tile": null,
+   "brush": "classic_kabura",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "dab_oil": {
+   "rect": [
+    0,
+    0.5,
+    0.25,
+    0.25
+   ],
+   "tile": 8,
+   "brush": "tanda_oil-03-paint",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "leaf": {
+   "rect": [
+    0.25,
+    0.5,
+    0.25,
+    0.25
+   ],
+   "tile": 9,
+   "brush": "tanda_oil-03-paint",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "puff_a": {
+   "rect": [
+    0.5,
+    0.5,
+    0.25,
+    0.25
+   ],
+   "tile": 10,
+   "brush": "tanda_oil-03-paint",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "puff_b": {
+   "rect": [
+    0.75,
+    0.5,
+    0.25,
+    0.25
+   ],
+   "tile": 11,
+   "brush": "tanda_oil-01-paint",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "wing": {
+   "rect": [
+    0,
+    0.75,
+    0.25,
+    0.25
+   ],
+   "tile": 12,
+   "brush": "classic_pointy_ink",
+   "value": "tanda_oil-06-paint",
+   "wrap": false
+  },
+  "field_a": {
+   "rect": [
+    0.25,
+    0.75,
+    0.25,
+    0.25
+   ],
+   "tile": 13,
+   "brush": "tanda_oil-01-paint",
+   "value": null,
+   "wrap": true
+  },
+  "field_b": {
+   "rect": [
+    0.5,
+    0.75,
+    0.25,
+    0.25
+   ],
+   "tile": 14,
+   "brush": "tanda_oil-06-paint",
+   "value": null,
+   "wrap": true
+  },
+  "flecks": {
+   "rect": [
+    0.75,
+    0.75,
+    0.25,
+    0.25
+   ],
+   "tile": 15,
+   "brush": "classic_textured_ink",
+   "value": null,
+   "wrap": false
+  }
+ },
+ "engine": "libmypaint 1.1 (60369db), ported to JavaScript (tools/mypaint_port.mjs) — ISC, Copyright (C) 2008-2011 Martin Renold and contributors",
+ "presets": "mypaint/mypaint-brushes brushes/* — CC0-1.0 (classic: the MyPaint team; tanda: Marcelo \"Tanda\" Cerviño; ramon: Ramón Miranda)"
+}

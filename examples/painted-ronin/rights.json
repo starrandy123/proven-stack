@@ -1,91 +1,109 @@
 {
-  "schema": "mosa.rights.v1",
-  "searched": "The files: every vendored library (vendor/*/LICENSE.txt, each npm release sha512-checked) and every asset folder (assets/quaternius from the packs' own License.txt, assets/polypizza from each model's Poly Pizza page). The web: each asset's page read 7 Nov 2026; the title \"Painted Ronin\" searched for an existing game of that name. The kasa, the katana, the scabbard, the rocks, the banners, the leaves and every sound are made in code here.",
-  "mine": "The game: its code (src/), its land, its rules, its look (the painterly pass is ported from Maxime Heckel's MIT code, credited in src/painterly.js), the kasa, katana, scabbard, rocks and banners, its sounds (ZzFX numbers, Karplus-Strong koto) and its name, made for this game with Claude Code and proven-stack.",
-  "others": [
-    {
-      "what": "Universal Base Characters (the head, eyes and brows), Modular Character Outfits - Fantasy (Male_Peasant, recoloured indigo: the ronin; Male_Ranger: the bandits), Universal Animation Library 1 and 2 (21 clips) — made phone-sized by tools/build_assets.mjs",
-      "by": "Quaternius",
-      "license": "CC0-1.0",
-      "from": "assets/quaternius/ (quaternius.itch.io: universal-base-characters, modular-character-outfits-fantasy, universal-animation-library, universal-animation-library-2; each pack's License.txt reads 'CC0 1.0 Universal (CC0 1.0) Public Domain Dedication')"
-    },
-    {
-      "what": "Torii Gate, Temple, Maple Trees, Bamboo",
-      "by": "Quaternius",
-      "license": "CC0-1.0",
-      "from": "assets/polypizza/ (poly.pizza/m/7SyXZ62xR5, /m/JsZnPztvRl, /m/iGFtQd0PJO, /m/xBPj13w3JQ: 'Public Domain (CC0)')"
-    },
-    {
-      "what": "Toro (stone lantern)",
-      "by": "Matt Newell",
-      "license": "CC-BY-3.0",
-      "from": "assets/polypizza/toro_lantern.glb (poly.pizza/m/0SguM8o_PMc: 'Creative Commons Attribution'); credit: Toro by Matt Newell [CC-BY] via Poly Pizza"
-    },
-    {
-      "what": "FastNoiseLite (fastnoise-lite@1.1.1)",
-      "by": "Jordan Peck (Auburn) and contributors",
-      "license": "MIT",
-      "from": "vendor/fastnoise/ (npm, sha512-checked; licence in vendor/fastnoise/LICENSE.txt; home https://github.com/Auburn/FastNoiseLite)"
-    },
-    {
-      "what": "howler.js (howler@2.2.4)",
-      "by": "James Simpson (GoldFire Studios)",
-      "license": "MIT",
-      "from": "vendor/howler/ (npm, sha512-checked; licence in vendor/howler/LICENSE.txt; home https://github.com/goldfire/howler.js)"
-    },
-    {
-      "what": "Jolt Physics (JoltPhysics.js) (jolt-physics@1.1.1), its fixed memory set to 32 MB",
-      "by": "Jorrit Rouwe",
-      "license": "MIT",
-      "from": "vendor/jolt/ (npm, sha512-checked; licence in vendor/jolt/LICENSE.txt; home https://github.com/jrouwe/JoltPhysics.js)"
-    },
-    {
-      "what": "Jolt Physics (C++), compiled into jolt-physics.wasm-compat.js",
-      "by": "Jorrit Rouwe",
-      "license": "MIT",
-      "from": "vendor/jolt/ (https://github.com/jrouwe/JoltPhysics)"
-    },
-    {
-      "what": "postprocessing (pmndrs) (postprocessing@6.39.6)",
-      "by": "Raoul van Rüschen and the pmndrs contributors",
-      "license": "Zlib",
-      "from": "vendor/postprocessing/ (npm, sha512-checked; licence in vendor/postprocessing/LICENSE.txt; home https://github.com/pmndrs/postprocessing)"
-    },
-    {
-      "what": "three.quarks (three.quarks@0.17.1, quarks.core@0.17.1)",
-      "by": "Alchemist0823 (Ziwei Chen)",
-      "license": "MIT",
-      "from": "vendor/quarks/ (npm, sha512-checked; licence in vendor/quarks/LICENSE.txt; home https://github.com/Alchemist0823/three.quarks)"
-    },
-    {
-      "what": "Recast & Detour (recast-navigation-js) (@recast-navigation/core@0.44.0, @recast-navigation/generators@0.44.0, @recast-navigation/three@0.44.0, @recast-navigation/wasm@0.44.0)",
-      "by": "Mikko Mononen and the Recast contributors (C++); Isaac Mason (JS)",
-      "license": "MIT",
-      "from": "vendor/recast/ (npm, sha512-checked; licence in vendor/recast/LICENSE.txt; home https://github.com/isaac-mason/recast-navigation-js)"
-    },
-    {
-      "what": "Recast & Detour (C++), compiled into recast-navigation.wasm-compat.js",
-      "by": "Mikko Mononen and the Recast & Detour contributors",
-      "license": "Zlib",
-      "from": "vendor/recast/ (https://github.com/recastnavigation/recastnavigation)"
-    },
-    {
-      "what": "three.js (three@0.187.0)",
-      "by": "Ricardo Cabello (mrdoob) and the three.js authors",
-      "license": "MIT",
-      "from": "vendor/three/ (npm, sha512-checked; licence in vendor/three/LICENSE.txt; home https://github.com/mrdoob/three.js)"
-    },
-    {
-      "what": "ZzFX (zzfx@1.4.0)",
-      "by": "Frank Force (KilledByAPixel)",
-      "license": "MIT",
-      "from": "vendor/zzfx/ (npm, sha512-checked; licence in vendor/zzfx/LICENSE.txt; home https://github.com/KilledByAPixel/ZzFX)"
-    },
-    {
-      "what": "21 animation clips from the Mesh2Motion human library (strafes, walking backwards, dodges, defend and blocks, weapon draw, two-handed swings, overhead slam, spear thrust, dizzy, hurt idle, four deaths and a spin death, a spin kick), retargeted onto the Quaternius rig at load by three.js SkeletonUtils.retargetClip",
-      "by": "Mesh2Motion contributors (the human rig and animations credit Quaternius)",
-      "license": "CC0-1.0",
-      "from": "assets/mesh2motion/ (github.com/Mesh2Motion/mesh2motion-app static/assets/human/animations; LICENSE-CC0.MD: 'All 3d models, blend files, rigs, animations · CC0 1.0 Universal')"
-    }
-  ]
+ "schema": "mosa.rights.v1",
+ "searched": "The files: every vendored library (vendor/*/LICENSE.txt, each npm release sha512-checked) and every asset folder (assets/quaternius from the packs' own License.txt, assets/polypizza from each model's Poly Pizza page). The web: each asset's page read 7 Nov 2026; the title \"Painted Ronin\" searched for an existing game of that name. The kasa, the katana, the scabbard, the rocks, the banners, the leaves and every sound are made in code here. 8 Nov 2026: the painted look's sources read at source (research H and I in the receipts): mypaint/mypaint-brushes' Licenses.dep5 (brushes/* CC0-1.0), libmypaint's COPYING (ISC), stegu/webgl-noise's LICENSE (MIT).",
+ "mine": "The game: its code (src/), its land, its rules, its look (the painterly pass is ported from Maxime Heckel's MIT code, credited in src/painterly.js; the painted sky, clouds, birds and strokes are written here to published methods — Sea of Thieves' cloud talk, Valve's TF2 shading paper, Meier's painterly rendering, the ukiyo-e bokashi — credited in each file), the kasa, katana, scabbard, rocks and banners, its sounds (ZzFX numbers, Karplus-Strong koto) and its name, made for this game with Claude Code and proven-stack.",
+ "others": [
+  {
+   "what": "Universal Base Characters (the head, eyes and brows), Modular Character Outfits - Fantasy (Male_Peasant, recoloured indigo: the ronin; Male_Ranger: the bandits), Universal Animation Library 1 and 2 (21 clips) — made phone-sized by tools/build_assets.mjs",
+   "by": "Quaternius",
+   "license": "CC0-1.0",
+   "from": "assets/quaternius/ (quaternius.itch.io: universal-base-characters, modular-character-outfits-fantasy, universal-animation-library, universal-animation-library-2; each pack's License.txt reads 'CC0 1.0 Universal (CC0 1.0) Public Domain Dedication')"
+  },
+  {
+   "what": "Torii Gate, Temple, Maple Trees, Bamboo",
+   "by": "Quaternius",
+   "license": "CC0-1.0",
+   "from": "assets/polypizza/ (poly.pizza/m/7SyXZ62xR5, /m/JsZnPztvRl, /m/iGFtQd0PJO, /m/xBPj13w3JQ: 'Public Domain (CC0)')"
+  },
+  {
+   "what": "Toro (stone lantern)",
+   "by": "Matt Newell",
+   "license": "CC-BY-3.0",
+   "from": "assets/polypizza/toro_lantern.glb (poly.pizza/m/0SguM8o_PMc: 'Creative Commons Attribution'); credit: Toro by Matt Newell [CC-BY] via Poly Pizza"
+  },
+  {
+   "what": "FastNoiseLite (fastnoise-lite@1.1.1)",
+   "by": "Jordan Peck (Auburn) and contributors",
+   "license": "MIT",
+   "from": "vendor/fastnoise/ (npm, sha512-checked; licence in vendor/fastnoise/LICENSE.txt; home https://github.com/Auburn/FastNoiseLite)"
+  },
+  {
+   "what": "howler.js (howler@2.2.4)",
+   "by": "James Simpson (GoldFire Studios)",
+   "license": "MIT",
+   "from": "vendor/howler/ (npm, sha512-checked; licence in vendor/howler/LICENSE.txt; home https://github.com/goldfire/howler.js)"
+  },
+  {
+   "what": "Jolt Physics (JoltPhysics.js) (jolt-physics@1.1.1), its fixed memory set to 32 MB",
+   "by": "Jorrit Rouwe",
+   "license": "MIT",
+   "from": "vendor/jolt/ (npm, sha512-checked; licence in vendor/jolt/LICENSE.txt; home https://github.com/jrouwe/JoltPhysics.js)"
+  },
+  {
+   "what": "Jolt Physics (C++), compiled into jolt-physics.wasm-compat.js",
+   "by": "Jorrit Rouwe",
+   "license": "MIT",
+   "from": "vendor/jolt/ (https://github.com/jrouwe/JoltPhysics)"
+  },
+  {
+   "what": "postprocessing (pmndrs) (postprocessing@6.39.6)",
+   "by": "Raoul van Rüschen and the pmndrs contributors",
+   "license": "Zlib",
+   "from": "vendor/postprocessing/ (npm, sha512-checked; licence in vendor/postprocessing/LICENSE.txt; home https://github.com/pmndrs/postprocessing)"
+  },
+  {
+   "what": "three.quarks (three.quarks@0.17.1, quarks.core@0.17.1)",
+   "by": "Alchemist0823 (Ziwei Chen)",
+   "license": "MIT",
+   "from": "vendor/quarks/ (npm, sha512-checked; licence in vendor/quarks/LICENSE.txt; home https://github.com/Alchemist0823/three.quarks)"
+  },
+  {
+   "what": "Recast & Detour (recast-navigation-js) (@recast-navigation/core@0.44.0, @recast-navigation/generators@0.44.0, @recast-navigation/three@0.44.0, @recast-navigation/wasm@0.44.0)",
+   "by": "Mikko Mononen and the Recast contributors (C++); Isaac Mason (JS)",
+   "license": "MIT",
+   "from": "vendor/recast/ (npm, sha512-checked; licence in vendor/recast/LICENSE.txt; home https://github.com/isaac-mason/recast-navigation-js)"
+  },
+  {
+   "what": "Recast & Detour (C++), compiled into recast-navigation.wasm-compat.js",
+   "by": "Mikko Mononen and the Recast & Detour contributors",
+   "license": "Zlib",
+   "from": "vendor/recast/ (https://github.com/recastnavigation/recastnavigation)"
+  },
+  {
+   "what": "three.js (three@0.187.0)",
+   "by": "Ricardo Cabello (mrdoob) and the three.js authors",
+   "license": "MIT",
+   "from": "vendor/three/ (npm, sha512-checked; licence in vendor/three/LICENSE.txt; home https://github.com/mrdoob/three.js)"
+  },
+  {
+   "what": "ZzFX (zzfx@1.4.0)",
+   "by": "Frank Force (KilledByAPixel)",
+   "license": "MIT",
+   "from": "vendor/zzfx/ (npm, sha512-checked; licence in vendor/zzfx/LICENSE.txt; home https://github.com/KilledByAPixel/ZzFX)"
+  },
+  {
+   "what": "21 animation clips from the Mesh2Motion human library (strafes, walking backwards, dodges, defend and blocks, weapon draw, two-handed swings, overhead slam, spear thrust, dizzy, hurt idle, four deaths and a spin death, a spin kick), retargeted onto the Quaternius rig at load by three.js SkeletonUtils.retargetClip",
+   "by": "Mesh2Motion contributors (the human rig and animations credit Quaternius)",
+   "license": "CC0-1.0",
+   "from": "assets/mesh2motion/ (github.com/Mesh2Motion/mesh2motion-app static/assets/human/animations; LICENSE-CC0.MD: 'All 3d models, blend files, rigs, animations · CC0 1.0 Universal')"
+  },
+  {
+   "what": "The brush atlas (assets/paint/atlas.png): MyPaint brush presets classic/dry_brush, kabura, pointy_ink, textured_ink, impressionism; tanda/oil-01-paint, oil-03-paint, oil-06-paint — painted into strokes by tools/bake_brushes.mjs",
+   "by": "The MyPaint Development Team; Marcelo \"Tanda\" Cerviño",
+   "license": "CC0-1.0",
+   "from": "assets/paint/ (atlas.png + atlas.json, painted by tools/bake_brushes.mjs) from github.com/mypaint/mypaint-brushes (Licenses.dep5: 'Files: brushes/*' … 'License: CC0-1.0'; 'By policy, MyPaint's brush settings are released into the public domain')"
+  },
+  {
+   "what": "The brush engine that painted the atlas: libmypaint 1.1's stroke and dab code, ported to JavaScript in tools/mypaint_port.mjs (a build tool: not shipped in the game, its strokes are)",
+   "by": "Martin Renold and the MyPaint contributors",
+   "license": "ISC",
+   "from": "github.com/mypaint/libmypaint at 60369db (COPYING: 'Copyright (C) 2008-2011 Martin Renold and contributors')"
+  },
+  {
+   "what": "3D simplex noise (src/noise3d.js, verbatim): the painted clouds' boil",
+   "by": "Ian McEwan, Ashima Arts; Stefan Gustavson",
+   "license": "MIT",
+   "from": "github.com/stegu/webgl-noise src/noise3D.glsl ('Copyright (C) 2011 Ashima Arts … Distributed under the MIT License')"
+  }
+ ]
 }

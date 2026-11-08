@@ -17,6 +17,9 @@ import { Bandits } from './enemies.js';
 import { createVfx } from './vfx.js';
 import { startAudio, updateAudio, play as sfx } from './audio.js';
 import { createBirds, createClouds, swayLeaves } from './life.js';
+import { loadPaint, paint, paintFogAll, paintSurface, measureHorizon, paintMemoryMB, PALETTE, RAMP, WIND } from './paint.js';
+import { paintSky } from './sky_painted.js';
+import { createPaintedClouds } from './clouds_painted.js';
 
 const Q = new URLSearchParams(location.search);
 const PLANT = Q.get('plant');                                               // test seams: a defect a wall must catch (tests/walls.mjs --plant …)
@@ -34,11 +37,15 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 renderer.toneMapping = THREE.NoToneMapping;                               // the painterly pass grades (ACES) at the end
 root.prepend(renderer.domElement);
 
+loading('mixing the paint (MyPaint\'s brushes)');
+await loadPaint();                                                            // the one brush atlas every painted thing samples (paint.js)
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.2, 1600);
 const sky = new Sky(); sky.scale.setScalar(4000); scene.add(sky);
 const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 11), THREE.MathUtils.degToRad(215));
 const U = sky.material.uniforms; U.turbidity.value = 3.5; U.rayleigh.value = 1.4; U.mieCoefficient.value = 0.006; U.mieDirectionalG.value = 0.85; U.sunPosition.value.copy(sunDir);
+const skyPaint = paintSky(sky, { plant: PLANT });                         // four tones, oil strokes, the bokashi band (sky_painted.js)
+{ const s = renderer.getDrawingBufferSize(new THREE.Vector2()); skyPaint.setResolution(s.x, s.y); }
 scene.fog = new THREE.Fog(new THREE.Color('#c9c3b4'), 90, 640);
 scene.add(new THREE.HemisphereLight('#bcd2f0', '#6b5a40', 1.35));
 const sun = new THREE.DirectionalLight('#ffdcae', 2.3);
@@ -65,10 +72,17 @@ const rest = restPose(ronin);                                             // the
 scene.add(ronin.root);
 
 loading('raising the shrine');
+const before = new Set(scene.children);
 const env = await buildEnvironment(scene, land, P);
-const vfx = createVfx(scene, { phone: PHONE });
-const birds = createBirds(scene, land, { flocks: PHONE ? 2 : 3, perFlock: PHONE ? 10 : 14 });
-const clouds = createClouds(scene, { count: PHONE ? 10 : 16, phone: PHONE });
+// the CC0 props keep their own colours and take the oil strokes laid on them in the world (a moving character never does: strokes
+// fixed in the world would swim over a body that walks through them — Meier's shower door)
+for (const o of scene.children) if (!before.has(o)) o.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh) for (const mm of [].concat(m.material)) if (mm.isMeshStandardMaterial && !mm.userData.paint) paintSurface(mm, { region: 'field_a', scale: 0.6, strength: 0.3, band: 0 }); });
+const vfx = createVfx(scene, { phone: PHONE, plant: PLANT });
+const birds = createBirds(scene, land, { flocks: PHONE ? 2 : 3, perFlock: PHONE ? 10 : 14, plant: PLANT });
+// the clouds: Sea of Thieves' painted mass (clouds_painted.js); the old billboard puffs only as the planted defect the walls must catch
+const clouds = PLANT === 'sprites' ? createClouds(scene, { count: PHONE ? 10 : 16, phone: PHONE }) : createPaintedClouds(scene, { count: PHONE ? 10 : 16, phone: PHONE, sunDir, plant: PLANT, targetHeight: PLANT === 'bigclouds' ? 4000 : 280,
+  // ?test: two known clouds for the paint walls, one away from the sun and one toward it, held still
+  anchors: Q.has('test') ? [SPAWN.clone().add(new THREE.Vector3(-sunDir.x, 0, -sunDir.z).normalize().multiplyScalar(260)).setY(SPAWN.y + 95), SPAWN.clone().add(new THREE.Vector3(sunDir.x, 0, sunDir.z).normalize().multiplyScalar(300)).setY(SPAWN.y + 105)] : [] });
 const sway = swayLeaves(scene);
 for (const c of env.camps) c.fire = vfx.fire(c.center.clone().add(new THREE.Vector3(0, 0.1, 0)));
 
@@ -80,6 +94,11 @@ const clipdata = await (await fetch('assets/clipdata.json')).json();      // eve
 vfx.clipdata = clipdata;
 const bandits = new Bandits(scene, kit, navs, P, rest, land, { perCamp: Q.has('test') ? 1 : 4, frozen: PLANT === 'nav', clipdata });
 if (PLANT === 'budget') bandits.budgetOff = true;
+if (PLANT === 'ramp256') { const d = new Uint8Array(256).map((_, i) => i); const t = new THREE.DataTexture(d, 256, 1, THREE.RedFormat); t.needsUpdate = true; scene.getObjectByName('painted-rocks').material.gradientMap = t; }   // a smooth light: the bands gone
+// the painted fog on everything that takes fog, ending in the sky's own horizon colour, measured off the sky (and the clouds exposed to it)
+paintFogAll(scene);
+measureHorizon(renderer, sky, sunDir);
+if (clouds.exposeTo) clouds.exposeTo(paint.sky12);
 const TOTAL = bandits.list.length;
 
 const composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
@@ -177,7 +196,7 @@ function specialUpdate(dt) {
     }
     if (!sp.fell) {
       sp.fell = true; sp.to = pos.clone();
-      vfx.stroke(sp.from.clone().add(new THREE.Vector3(0, 1.05, 0)), sp.to.clone().add(new THREE.Vector3(0, 1.25, 0)), { width: 0.55, color: '#8e1510', life: 1.7 });
+      vfx.stroke(sp.from.clone().add(new THREE.Vector3(0, 1.05, 0)), sp.to.clone().add(new THREE.Vector3(0, 1.25, 0)), { width: 0.55, color: 'crimson', life: 1.7 });
       sp.fallAt = sp.t + 0.32;                                               // a beat of silence, then they fall
     }
     if (sp.t >= sp.fallAt && sp.victims) {
@@ -193,7 +212,7 @@ function specialUpdate(dt) {
       const a0 = facing + sp.done * 2.1;
       for (let k = 0; k < 3; k++) {                                           // an ink ring, three strokes around him
         const a = a0 + k * 2.09, r = 2.6;
-        vfx.stroke(pos.clone().add(new THREE.Vector3(Math.sin(a) * r, 1.0 + k * 0.15, Math.cos(a) * r)), pos.clone().add(new THREE.Vector3(Math.sin(a + 1.9) * r, 1.1, Math.cos(a + 1.9) * r)), { width: 0.4, color: last ? '#8e1510' : '#14090a', life: 0.9 });
+        vfx.stroke(pos.clone().add(new THREE.Vector3(Math.sin(a) * r, 1.0 + k * 0.15, Math.cos(a) * r)), pos.clone().add(new THREE.Vector3(Math.sin(a + 1.9) * r, 1.1, Math.cos(a + 1.9) * r)), { width: 0.4, color: last ? 'crimson' : 'ink', life: 0.9 });
       }
       let n = 0;
       for (const b of bandits.alive()) {
@@ -218,7 +237,7 @@ function frame(now) {
   const inp = input.read();
   freeze = Math.max(0, freeze - realDt); slow = Math.max(0, slow - realDt);
   const dt = freeze > 0 ? 0 : realDt * (slow > 0 ? 0.3 : 1);              // hit-stop holds the world; slow motion runs it at 0.3x; the camera stays real-time
-  time += dt;
+  time += dt; paint.time.value += dt; skyPaint.update(time * 1000);
   cam.yaw -= inp.dx * 0.0032; cam.pitch = THREE.MathUtils.clamp(cam.pitch + inp.dy * 0.0026, -0.25, 1.1);
   fwd.set(-Math.sin(cam.yaw), 0, -Math.cos(cam.yaw)); right.set(-fwd.z, 0, fwd.x);
   move.set(0, 0, 0);
@@ -297,7 +316,7 @@ function frame(now) {
   vfx.trailUpdate(ronin.sword, !!pc.strike && pc.strike.t / pc.strike.dur > 0.15 && pc.strike.t / pc.strike.dur < 0.7);
   vfx.update(dt, pos); vfx.strokeUpdate(realDt, camera);
   birds.update(realDt, pos, bandits.list.some((b) => !b.dead && b.state !== 'idle' && b.state !== 'return') ? 1 : 0); clouds.update(realDt); sway.update(realDt);
-  for (const c of env.camps) { c.fire.light.intensity = 5 + Math.sin(time * 11) * 0.8 + Math.sin(time * 23) * 0.5; for (const f of c.group.userData.flags) f.rotation.y = Math.sin(time * 1.7 + f.userData.wave) * 0.25; }
+  for (const c of env.camps) { c.fire.light.intensity = 5 + Math.sin(time * 11) * 0.8 + Math.sin(time * 23) * 0.5; for (const f of c.group.userData.flags) f.rotation.y = f.userData.base + Math.sin(time * 1.7 + f.userData.wave) * 0.25; }
 
   // the camera: behind and above, never under the ground, shaken by trauma² (KidsCanCode's screen shake)
   if (!cam.hold) cam.target.lerp(tmp.copy(pos).add(new THREE.Vector3(0, 1.5, 0)), 1 - Math.exp(-realDt * 10));   // cam.hold: a locked-off shot (filming)
@@ -313,6 +332,7 @@ function frame(now) {
   grass.update(realDt, camera, pos);
   updateAudio(realDt, { speed: Math.hypot(vx, vz), danger: bandits.list.some((b) => !b.dead && b.state !== 'idle') ? 1 : 0 });
   hud.hp.style.width = Math.max(0, pc.hp) + '%'; hud.ki.style.width = pc.ki + '%'; document.body.classList.toggle('ki-50', pc.ki >= 50); document.body.classList.toggle('ki-100', pc.ki >= 100); document.body.classList.toggle('slowmo', slow > 0); hud.kills.textContent = `斬 ${pc.kills} / ${TOTAL}`;
+  if (clouds.render) { camera.updateMatrixWorld(); clouds.render(renderer, camera); }        // the clouds' mass into its buffer, before the frame
   composer.render(realDt);
   if (!booted) { booted = true; if (window.__MOSA_BOOT) window.__MOSA_BOOT.ok = true; else window.__MOSA_BOOT = { ok: true };   // NotesMosaic: ready on the first painted frame
     document.body.classList.add('booted'); setTimeout(() => hud.help.classList.add('gone'), 9000); }
@@ -331,12 +351,13 @@ function memory() {
   scene.traverse((o) => { const m = o.material; if (!m) return; for (const mm of Array.isArray(m) ? m : [m]) for (const k of ['map', 'alphaMap']) { const t = mm[k]; if (t && t.image && !seen.has(t)) { seen.add(t); tex += (t.image.width || 0) * (t.image.height || 0) * 4 * 1.33; } } });
   const w = renderer.domElement.width, h = renderer.domElement.height, rts = w * h * 8 * 3 + (w * h * painterly.scale * painterly.scale) * 8 * 3 + sun.shadow.mapSize.x * sun.shadow.mapSize.y * 4;
   const heap = performance.memory ? performance.memory.usedJSHeapSize / 1048576 : 60;
-  const out = { jolt: P.Jolt.HEAP8.buffer.byteLength / 1048576, recast: 16, textures: tex / 1048576, targets: rts / 1048576, heap };
+  const out = { jolt: P.Jolt.HEAP8.buffer.byteLength / 1048576, recast: 16, textures: (tex / 1048576) + paintMemoryMB(), targets: (rts / 1048576) + (clouds.memoryMB ? clouds.memoryMB() : 0), heap };
   out.totalMB = out.jolt + out.recast + out.textures + out.targets + out.heap;
   return out;
 }
 
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
-window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, birds, clouds,
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  const s = renderer.getDrawingBufferSize(new THREE.Vector2()); skyPaint.setResolution(s.x, s.y); if (clouds.setSize) clouds.setSize(s.x, s.y); });
+window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, birds, clouds, sky, skyPaint, paint, PALETTE, RAMP, WIND, sunDir,
   get facing() { return facing; }, set facing(v) { facing = v; } };
 requestAnimationFrame(frame);

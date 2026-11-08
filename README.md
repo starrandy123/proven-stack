@@ -76,10 +76,15 @@ node tools/shot.mjs my-game shot.png --keys "KeyW:1500"                         
 | `src/ragdoll.js` | Jolt ragdolls on any humanoid rig: capsules on the bones, swing-twist joints, one-way knees and elbows, limits counted **from the rest pose**, plus an anatomical measure of every bend | Jolt `Examples/rig/` + NotesMosaic's Tinlight | **W2**: knees and elbows stay in −15°..155°; plant `knee` (a flipped hinge) folds knees to −136° and turns it red |
 | `src/navigation.js` | a tiled navmesh baked from the level's triangles, a Detour crowd stepped at a fixed 60 Hz | recast-navigation-js `example-crowd-fixed-stepping-with-interpolation.ts` | **W3**: a bandit reaches the player in under 6 s; plant `nav` turns it red |
 | `src/grass.js` | wind-blown grass fields: instanced patches, 6/1-segment LODs, clumps, player push | SimonDev's [Quick_Grass](https://github.com/simondevyoutube/Quick_Grass) (MIT), Ghost of Tsushima's GDC 2021 talk | — |
-| `src/painterly.js` | the oil-paint look: anisotropic Kuwahara at a fraction of the screen, brush sized by depth | Maxime Heckel's [painterly shaders](https://github.com/MaximeHeckel/blog.maximeheckel.com) (MIT code) + Acerola's tensor blur and depth radius (MIT); Kyprianidis et al. 2009 | — |
+| `src/painterly.js` | the oil-paint look: anisotropic Kuwahara at a fraction of the screen, brush sized by depth | Maxime Heckel's [painterly shaders](https://github.com/MaximeHeckel/blog.maximeheckel.com) (MIT code) + Acerola's tensor blur and depth radius (MIT); Kyprianidis et al. 2009 | S3 reads its tensor |
+| `src/paint.js` | **one painted language**: one brush atlas, strokes laid on objects in the world (triplanar), a 3-band light ramp whose edge follows the bristles, 16 swatches, one wind, fog that ends in the sky's measured horizon | Meier, ["Painterly Rendering for Animation"](https://www.cs.princeton.edu/courses/archive/fall00/cs597b/papers/meier96.pdf) (SIGGRAPH 96); Valve's TF2 shading (NPAR 2007); Firewatch (GDC 2015); Ghost of Tsushima's one wind | **L1-L6** (`tests/paint.mjs`) |
+| `tools/bake_brushes.mjs` + `tools/mypaint_port.mjs` | the brush atlas, painted by MyPaint's own engine from its CC0 presets (Tanda's oil brushes, the dry brush, kabura's sumi stroke) | [libmypaint](https://github.com/mypaint/libmypaint) 1.1 (ISC), ported from its C source; [mypaint-brushes](https://github.com/mypaint/mypaint-brushes) (`brushes/*` CC0) | L1 |
+| `src/sky_painted.js` | a painted sky: four soft tones, oil strokes anchored to the sky, a ukiyo-e bokashi band across the top | three.js `Sky.js` (MIT), patched; Gurney's four sky mixes; the ichimonji bokashi (JAANUS) | **S1-S3** |
+| `src/clouds_painted.js` | painted cumulus: opaque boiled puffs drawn into a small buffer, blurred into one mass, given a painted edge, three tones and a silver lining | Sea of Thieves, ["The Technical Art of Sea of Thieves"](https://history.siggraph.org/wp-content/uploads/2022/09/2018-Talks-Ang_The-Technical-Art-of-Sea-of-Thieves.pdf) (SIGGRAPH 2018); UnlitClouds (CC0); [webgl-noise](https://github.com/stegu/webgl-noise) (MIT) | **C1-C4** |
+| `src/life.js` | boid flocks as sumi-e brush strokes (cranes, swallows), wind in the maples | Reynolds 1987; three.js `webgl_gpgpu_birds` (MIT) | L4 |
 | `src/characters.js` | Quaternius's CC0 rig + 21 clips on one skeleton, an animation blender, pieces attached to bones | three.js `AnimationMixer`, `SkeletonUtils` | W4 |
 | `src/enemies.js` | crowd agents with a state machine: idle → chase → wind-up blow → recover → ragdoll | — | **W4** combat; plant `blade` turns it red |
-| `src/vfx.js` | falling leaves, sparks, ink spray, fires (three.quarks); a two-socket sword trail; ink strokes | three.quarks; Unreal's two-socket trail design | **W6/W7** specials; plant `specials` turns them red |
+| `src/vfx.js` | falling leaves, sparks, ink spray, fires and smoke that erodes (three.quarks, all stamped from the one atlas); a two-socket sword trail; the slash as a MyPaint stroke laid on the blade's measured path | three.quarks; Unreal's two-socket trail; Simon Trümpler's erosion (RIME) | **W6/W7** specials · **W9** contact · L1/L3/L5 |
 | `src/audio.js` | ZzFX sound effects, filtered-noise wind, a Karplus-Strong koto | ZzFX; Karplus & Strong 1983 | — |
 | `tools/build_assets.mjs` | CC0 packs → phone-sized GLBs: outfits recoloured, a head cut from a body by its bone weights, only the clips you play | glTF-Transform (MIT), sharp (Apache-2.0) | — |
 
@@ -98,11 +103,24 @@ node tools/shot.mjs my-game shot.png --keys "KeyW:1500"                         
 - **Jolt's npm build fixes its memory at 128 MB**, two thirds of what NotesMosaic lets a phone hold (192 MB). `--jolt-mb 32` gives a
   phone the rest back; measure your peak first.
 
+- **A post filter alone is not a painting** (Alex Evans on Dreams: "I have a strong dislike of 'painterly post fx'"). Over a smooth
+  gradient the Kuwahara filter returns its input: give every surface strokes before it runs (`paint.js`).
+- **A MyPaint preset's size is a scale of its own base**, the way MyPaint's size slider moves it: forcing pointy_ink's base radius to
+  22 px under its +3.36 pressure curve painted a 630 px disc. Shift the base by `ln(scale)` and let the curves ride on it.
+- **three.js declares `projectionMatrix` only in the vertex shader.** A fragment shader that writes `gl_FragDepth` declares it itself.
+- **three.quarks multiplies `ColorOverLife` by the start colour.** Start white and put the palette in the gradient, or smoke comes out
+  smoke × smoke.
+- **zsh does not split `${p:+--plant $p}`**: the test got one argument, ignored it, and three "planted" runs were clean runs. Pass plants
+  from bash, or as two words.
+- **Strokes fixed in the world swim over a body that moves through them** (Meier's "shower door"): paint the props, never a walking
+  character, with world-space strokes.
+
 ## Art your game may ship
 
 Human-made, licences read at their source (the research is in the receipts):
 - **CC0:** Quaternius (Universal Base Characters, Modular Character Outfits, Universal Animation Library 1 and 2, its Poly Pizza
-  models), KayKit, Kenney, Poly Haven, ambientCG.
+  models), KayKit, Kenney, Poly Haven, ambientCG, and MyPaint's brush presets (`mypaint-brushes/brushes/*`; its build files are GPL,
+  so take only the presets).
 - **CC-BY, credited:** e.g. Matt Newell's stone lantern.
 - **Not in a game's files or this repo:**
   - Mixamo: "under no circumstances can you distribute the Content Files on a stand-alone basis".

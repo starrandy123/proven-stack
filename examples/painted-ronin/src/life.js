@@ -2,30 +2,56 @@
 //  · Birds: Craig Reynolds' boids (1987: separation, alignment, cohesion), with the bird of three.js's own webgl_gpgpu_birds example
 //    (MIT: a body and two wings, three triangles, the wing tips flapping by a sine of each bird's phase, the phase running faster as
 //    it climbs). Here on the CPU: a few dozen birds cost a phone nothing, where the example's GPGPU needs float render targets.
-//  · Clouds: billboard puffs gathered into cumulus, the way drei's <Cloud> builds them (MIT): each cloud a cluster of soft sprites,
-//    lit from above and shaded beneath, drifting with the wind. The puff is painted here on a canvas; the oil-paint pass does the rest.
+//  · Clouds: clouds_painted.js (Sea of Thieves' method). createClouds below is the OLD billboard cumulus, kept only as the planted
+//    defect `sprites` that the painted-cloud wall C6 must catch (the owner: "just meshes").
 import * as THREE from 'three';
+import { PAINT_GLSL, atlasUniforms, rect, col, WIND } from './paint.js';
 
 // ── birds ──
-function birdGeometry() {                                             // three.js webgl_gpgpu_birds BirdGeometry, one bird, in metres
-  const k = 0.022, v = [0, 0, -20, 0, 4, -20, 0, 0, 30, 0, 0, -15, -20, 0, 0, 0, 0, 15, 0, 0, 15, 20, 0, 0, 0, 0, -15].map((x) => x * k);
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-  g.setAttribute('birdVertex', new THREE.Float32BufferAttribute([0, 1, 2, 3, 4, 5, 6, 7, 8], 1));
+// Each bird is three brush strokes — a body and two wings — not three flat triangles: every wing is a quad that carries the one atlas's
+// sumi-e comma (MyPaint's pointy_ink, heavy at the root, a dry thin tip), its two tip corners flapping by a sine of the bird's phase
+// (three.js webgl_gpgpu_birds, MIT: the wing tips flap, the beat quickens as the bird climbs). A crane is paper with ink primaries; a
+// swallow is all ink. The brush cuts the outline (alpha) and its bristles shade the inside (value): research I §4, "Birds".
+function birdGeometry() {
+  const L = 0.46, root = 0.13, tip = 0.03, bodyL = 0.27, bodyW = 0.05;
+  // quads: [corner positions], uv u runs root → tip (body: head → tail), v across; flap marks the corners that beat
+  const quads = [
+    { p: [[0, 0, bodyL], [bodyW, 0, bodyL], [bodyW, 0, -bodyL], [0, 0, -bodyL]], flap: [0, 0, 0, 0], part: 0 },          // body: head → tail
+    { p: [[0, 0, root], [0, 0, -root], [-L, 0, -tip - 0.06], [-L, 0, tip - 0.06]], flap: [0, 0, 1, 1], part: 1 },      // left wing
+    { p: [[0, 0, -root], [0, 0, root], [L, 0, tip - 0.06], [L, 0, -tip - 0.06]], flap: [0, 0, 1, 1], part: 1 },      // right wing
+  ];
+  const pos = [], uv = [], flap = [], part = [], idx = [];
+  quads.forEach((q, i) => {
+    q.p.forEach((c, k) => { pos.push(c[0] - (i === 0 ? bodyW / 2 : 0), c[1], c[2]); uv.push(k < 2 ? 0 : 1, k === 0 || k === 3 ? 1 : 0); flap.push(q.flap[k]); part.push(q.part); });
+    const b = i * 4; idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('flap', new THREE.Float32BufferAttribute(flap, 1)); g.setAttribute('part', new THREE.Float32BufferAttribute(part, 1)); g.setIndex(idx);
   return g;
 }
 
-export function createBirds(scene, land, { flocks = 3, perFlock = 14 } = {}) {
+export function createBirds(scene, land, { flocks = 3, perFlock = 14, plant = null } = {}) {
   const n = flocks * perFlock, geo = birdGeometry();
   const phase = new Float32Array(n); geo.setAttribute('phase', new THREE.InstancedBufferAttribute(phase, 1));
   const crane = new Float32Array(n); geo.setAttribute('crane', new THREE.InstancedBufferAttribute(crane, 1));   // flock 0: white cranes
+  const flat = plant === 'flatbird';
   const mat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
-    vertexShader: `attribute float birdVertex; attribute float phase; attribute float crane; varying vec3 vCol; void main(){ vec3 p = position;
-      if (birdVertex == 4.0 || birdVertex == 7.0) p.y = sin(phase) * 0.11;         // the example's flap: the two wing tips
-      bool tip = birdVertex == 4.0 || birdVertex == 7.0;
-      vCol = crane > 0.5 ? (tip ? vec3(0.08) : vec3(0.95, 0.94, 0.9)) : vec3(0.16, 0.14, 0.13);
-      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(p * (crane > 0.5 ? 2.3 : 1.0), 1.0); }`,
-    fragmentShader: 'varying vec3 vCol; void main(){ gl_FragColor = vec4(vCol, 1.0); }' });
-  const mesh = new THREE.InstancedMesh(geo, mat, n); mesh.frustumCulled = false; scene.add(mesh);
+    uniforms: { ...atlasUniforms(), wingRect: { value: rect('wing') }, paperC: { value: col('paper') }, inkC: { value: plant === 'crane00ff00' ? new THREE.Color(0, 1, 0) : col('ink') },
+      flatOn: { value: flat ? 1 : 0 } },
+    vertexShader: `attribute float flap; attribute float part; attribute float phase; attribute float crane; varying vec2 vUv; varying float vCrane; varying float vPart;
+      void main(){ vec3 p = position; p.y += (0.06 + sin(phase) * 0.2) * flap;          // the wing tips beat, the wings held a little up (a dihedral)
+        vUv = uv; vCrane = crane; vPart = part;
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(p * (crane > 0.5 ? 2.3 : 1.0), 1.0); }`,
+    fragmentShader: `uniform vec4 wingRect; uniform vec3 paperC; uniform vec3 inkC; uniform float flatOn; varying vec2 vUv; varying float vCrane; varying float vPart;
+      ${PAINT_GLSL}
+      void main(){
+        vec4 t = paintTile(vec2(0.03 + vUv.x * 0.93, 0.555 + (vUv.y - 0.5) * 0.3), wingRect);   // the feather stroke fills the quad's chord
+        float a = mix(t.a, 1.0, flatOn); if (a < 0.32) discard;
+        vec3 c = vCrane > 0.5 ? mix(paperC, inkC, vPart * smoothstep(0.55, 0.72, vUv.x)) : inkC;   // a crane's wing ends in black primaries
+        c *= mix(0.82 + (t.r - 0.62) * 0.95, 1.0, flatOn);                                   // the bristles' own light and dark
+        gl_FragColor = vec4(c, 1.0); }` });
+  const mesh = new THREE.InstancedMesh(geo, mat, n); mesh.frustumCulled = false; mesh.name = 'painted-birds'; scene.add(mesh);
   const birds = [], homes = [];
   for (let f = 0; f < flocks; f++) {
     const home = new THREE.Vector3((Math.random() - 0.5) * 240, 0, (Math.random() - 0.5) * 240); home.y = land.groundY(home.x, home.z) + 28 + Math.random() * 18;
@@ -37,6 +63,7 @@ export function createBirds(scene, land, { flocks = 3, perFlock = 14 } = {}) {
   const sep = new THREE.Vector3(), ali = new THREE.Vector3(), coh = new THREE.Vector3(), tmp = new THREE.Vector3();
   let t = 0;
   return {
+    mesh,
     update(dt, playerPos, danger) {
       t += dt;
       homes.forEach((h, f) => { h.x += Math.sin(t * 0.05 + f) * dt * 3; h.z += Math.cos(t * 0.04 + f * 2) * dt * 3; });

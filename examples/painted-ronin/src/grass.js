@@ -6,6 +6,7 @@
 // the ground is our height field (read with texelFetch, so no float filtering is needed on a phone), a density channel keeps grass
 // off cliffs, paths and camps, the colours are a painter's dry susuki field, and the lighting is a short Lambert + translucency.
 import * as THREE from 'three';
+import { FOG_RAMP_GLSL, paint, WIND } from './paint.js';
 
 const PATCH = 10, SEG_HIGH = 6, SEG_LOW = 1;
 
@@ -31,7 +32,7 @@ function bladeGeometry(segments, count) {                              // SimonD
 
 const VERT = `
 precision highp float;
-uniform vec2 grassSize; uniform vec4 grassParams; uniform vec4 grassDraw; uniform float time;
+uniform vec2 grassSize; uniform vec4 grassParams; uniform vec4 grassDraw; uniform float time; uniform float windAngle; varying vec3 vPaintFogDir;
 uniform highp sampler2D heightmap; uniform vec4 heightParams; uniform vec3 playerPos; uniform vec3 sunDir;
 attribute float vertIndex;
 varying vec3 vColour; varying float vHeight; varying vec3 vNormal; varying float vFog; varying float vSun;
@@ -83,7 +84,7 @@ void main() {
   float widthHigh = easeOut(1.0 - hp, 2.0), widthLow = 1.0 - hp;
   float totalW = grassSize.x * mix(widthHigh, widthLow, highLODOut) * allowed;
   float x = (xSide - 0.5) * totalW, y = hp * totalH;
-  float windDir = noise12(bladePos.xz * 0.05 + 0.05 * time);
+  float windDir = windAngle + noise12(bladePos.xz * 0.05 + 0.05 * time) * 0.35;      // the one wind (paint.js WIND), gusting ±20°
   float windNoise = noise12(bladePos.xz * 0.25 + time * 1.0);
   float windLean = easeIn(remap(windNoise, -1.0, 1.0, 0.25, 1.0), 2.0) * 1.25 * hp;
   vec3 windAxis = vec3(cos(windDir), 0.0, sin(windDir));
@@ -112,19 +113,21 @@ void main() {
   float vdn = saturate1(dot(faceN, normalize(vec3(viewDir.x, 0.0, viewDir.z))));
   mv.x += easeOut(1.0 - vdn, 4.0) * smoothstep(0.0, 0.2, vdn) * (xSide - 0.5) * totalW * 0.5 * zSide;
   gl_Position = projectionMatrix * mv;
-  vFog = -mv.z;
+  vFog = -mv.z; vPaintFogDir = world - cameraPosition;
 }`;
 
 const FRAG = `
 precision highp float;
 uniform vec3 sunColour; uniform vec3 skyColour; uniform vec3 fogColor; uniform float fogNear; uniform float fogFar;
+uniform vec3 paintHorizonSun; uniform vec3 paintHorizonAway; uniform vec2 paintSunXZ; varying vec3 vPaintFogDir;
 varying vec3 vColour; varying float vHeight; varying vec3 vNormal; varying float vFog; varying float vSun;
 void main() {
   float ao = mix(0.35, 1.0, smoothstep(0.0, 0.7, vHeight));                       // dark at the roots
   vec3 c = vColour * (skyColour * 0.55 + sunColour * (0.35 + 0.65 * vSun)) * ao;
   c += vColour * sunColour * 0.25 * vHeight * vHeight;                            // light through the tips
-  float f = smoothstep(fogNear, fogFar, vFog);
-  gl_FragColor = vec4(mix(c, fogColor, f), 1.0);
+  float fogFactor = smoothstep(fogNear, fogFar, vFog);
+  ${FOG_RAMP_GLSL}
+  gl_FragColor = vec4(mix(c, paintFogC, fogFactor), 1.0);                        // the fog ends in the sky's horizon (paint.js)
 }`;
 
 export function createGrass(scene, land, N, SPACING, { phone = false, sunDir, fog } = {}) {
@@ -148,6 +151,8 @@ export function createGrass(scene, land, N, SPACING, { phone = false, sunDir, fo
     grassDraw: { value: new THREE.Vector4(LOD, MAX, 0, 0) }, time: { value: 0 }, heightmap: { value: tex },
     heightParams: { value: new THREE.Vector4((N - 1) * SPACING, N, SPACING, 0) }, playerPos: { value: new THREE.Vector3() },
     sunDir: { value: sunDir.clone() }, sunColour: { value: new THREE.Color('#ffdcae') }, skyColour: { value: new THREE.Color('#9fb6d6') },
+    windAngle: { value: Math.atan2(WIND.x, -WIND.z) },                 // a blade leans toward (sin φ, 0, −cos φ): rotateAxis turns by −t
+    paintHorizonSun: paint.horizonSun, paintHorizonAway: paint.horizonAway, paintSunXZ: paint.sunXZ,
     fogColor: { value: fog.color }, fogNear: { value: fog.near }, fogFar: { value: fog.far },
   });
   const matHigh = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms(SEG_HIGH) });
