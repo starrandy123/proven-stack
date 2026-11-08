@@ -72,7 +72,10 @@ loading('mapping the paths (Recast)');
 const regions = land.spots.camps.map((c, i) => ({ name: 'camp' + i, center: c, size: 60, maxAgents: 6,
   meshes: [terrainPatch(land, c, 60, N, SPACING), ...obstacleMeshes(env.obstacles, land, c, 60)] }));
 const navs = await createNavigation(regions);
-const bandits = new Bandits(scene, kit, navs, P, rest, land, { perCamp: Q.has('test') ? 1 : 4, frozen: PLANT === 'nav' });
+const clipdata = await (await fetch('assets/clipdata.json')).json();      // every clip's impacts and blade path, measured (tools/measure_clips.mjs)
+vfx.clipdata = clipdata;
+const bandits = new Bandits(scene, kit, navs, P, rest, land, { perCamp: Q.has('test') ? 1 : 4, frozen: PLANT === 'nav', clipdata });
+if (PLANT === 'budget') bandits.budgetOff = true;
 const TOTAL = bandits.list.length;
 
 const composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
@@ -83,28 +86,54 @@ if (Q.has('raw')) painterly.enabled = false;
 
 // ── the ronin's fight ──
 const pc = { hp: 100, alive: true, queued: false, strike: null, roll: 0, invuln: 0, deadT: 0, kills: 0, ki: 0, special: null };
-const COMBO = [{ clip: 'Sword_Regular_A', power: 1, at: [0.3, 0.55], speed: 1.15 }, { clip: 'Sword_Regular_B', power: 1, at: [0.3, 0.55], speed: 1.15 }, { clip: 'Sword_Regular_C', power: 2, at: [0.35, 0.6], speed: 1.05 }];
+// the combo, swift: cut, cut, a two-handed finisher; a strike while sprinting is a dash attack. Each strike's impact is MEASURED from
+// its clip; the next strike starts 166 ms after an impact that hit, 200 ms after one that missed (For Honor's cancel windows); a press
+// during a strike is buffered. At the start of every strike the ronin turns to the best bandit in a 70° cone within 6 m and covers the
+// distance so the blade arrives at reach (motion warping, Unreal Engine's Motion Warping; God of War's attack magnetism).
+const COMBO = [{ clip: 'Sword_Regular_A', power: 1, speed: 1.15 }, { clip: 'Sword_Regular_B', power: 1, speed: 1.15 }, { clip: 'two-handed-horizontal-swing', power: 2, speed: 1.25 }];
+const DASH_STRIKE = { clip: 'Sword_Dash', power: 2, speed: 1.35 };
+const REACH = 1.5;
 let freeze = 0, trauma = 0, slow = 0;                                  // slow: seconds of slow motion left (the world at 0.3x)
 const pos = new THREE.Vector3(), fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3(), tmp = new THREE.Vector3();
+const vel = new THREE.Vector2();                                       // the ronin's own velocity: it accelerates, never jumps to speed
 let facing = 0, acc = 0, last = performance.now(), booted = false, time = 0;
-function strike(i) {
-  const s = COMBO[i]; pc.queued = false;
-  const a = ronin.play(s.clip, { loop: false, fade: 0.08, speed: s.speed, onEnd: () => { if (pc.strike && pc.strike.i === i) { pc.strike = null; if (pc.queued && i < 2) strike(i + 1); } } });
-  pc.strike = { i, t: 0, dur: a.getClip().duration / s.speed, hit: false };
+const impactOf = (clip) => ((clipdata[clip] && clipdata[clip].hits) || [0.25])[0];
+function bestTarget(maxD = 6, cone = 70) {
+  let best = null, score = 1e9;
+  for (const b of bandits.alive()) {
+    const to = new THREE.Vector3().subVectors(b.root.position, pos).setY(0), d = to.length();
+    if (d > maxD) continue;
+    const ang = Math.abs(Math.atan2(Math.sin(Math.atan2(to.x, to.z) - facing), Math.cos(Math.atan2(to.x, to.z) - facing))) * 57.3;
+    if (ang > cone && d > 1.2) continue;
+    const sc = d + ang * 0.05; if (sc < score) { score = sc; best = b; }
+  }
+  return best;
+}
+function strike(i, def) {
+  const s = def || COMBO[i]; pc.queued = false;
+  const a = ronin.play(s.clip, { loop: false, fade: 0.06, speed: s.speed, onEnd: () => { if (pc.strike && pc.strike.def === s) pc.strike = null; } });
+  const impact = impactOf(s.clip) / s.speed, target = bestTarget(s === DASH_STRIKE ? 9 : 6);
+  let lunge = 0;
+  if (target) { const to = new THREE.Vector3().subVectors(target.root.position, pos).setY(0); facing = Math.atan2(to.x, to.z); lunge = Math.min(12, Math.max(0, to.length() - REACH) / Math.max(0.08, impact)); }
+  else if (s === DASH_STRIKE) lunge = 9;
+  pc.strike = { i, def: s, t: 0, dur: a.getClip().duration / s.speed, impact, hit: false, landed: false, lunge, target };
+  vfx.slashArc(ronin, s.clip, s.speed, impact, s.power > 1);
   sfx(s.power > 1 ? 'heavy' : 'swing');
 }
-bandits.onBlow = (b, dir) => {
-  if (!pc.alive || pc.invuln > 0) return;
-  const toB = new THREE.Vector3().subVectors(b.root.position, pos); toB.y = 0; toB.normalize();
+bandits.onBlow = (b, dir, kind) => {
+  if (!pc.alive || pc.invuln > 0) return;                                // a dodge's first 233 ms: the blow passes through (For Honor)
+  const toB = new THREE.Vector3().subVectors(b.root.position, pos).setY(0).normalize();
   const facingV = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-  if (pc.strike && facingV.dot(toB) > 0.6 && pc.strike.t / pc.strike.dur < 0.5) {               // blades meet: a parry
-    sfx('clash'); vfx.hit(pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(toB, 0.7), toB, false); trauma += 0.25; freeze = 0.06; slow = Math.max(slow, 0.45); pc.ki = Math.min(100, pc.ki + 25); return;
+  if (pc.strike && facingV.dot(toB) > 0.6 && pc.strike.t < pc.strike.impact + 0.05) {   // blades meet: a parry
+    sfx('clash'); vfx.hit(pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(toB, 0.7), toB, false); trauma += 0.25; freeze = 0.06; slow = Math.max(slow, 0.45); pc.ki = Math.min(100, pc.ki + 25);
+    bandits.flinchKick(b, toB, 0.5); return;
   }
-  pc.hp -= 14; trauma = Math.min(1, trauma + 0.55); freeze = 0.06; sfx('hurt');
+  pc.hp -= kind === 'heavy' ? 18 : kind === 'combo' ? 8 : 10; trauma = Math.min(1, trauma + (kind === 'heavy' ? 0.7 : 0.45)); freeze = 0.06; sfx('hurt');
   vfx.hit(pos.clone().add(new THREE.Vector3(0, 1.3, 0)), dir.clone().negate(), true);
+  pc.knock = { dir: dir.clone(), left: kind === 'heavy' ? 0.9 : 0.3 };
   document.body.classList.add('hurt'); setTimeout(() => document.body.classList.remove('hurt'), 180);
   if (pc.hp <= 0) { pc.alive = false; pc.strike = null; pc.deadT = 0; ronin.play('Death01', { loop: false, fade: 0.1 }); sfx('fall'); say('倒 — the ronin falls', 3500); }
-  else if (!pc.strike && pc.roll <= 0) ronin.play('Hit_Chest', { loop: false, fade: 0.08, speed: 1.3 });
+  else if (!pc.strike && pc.roll <= 0) ronin.play('Hit_Chest', { loop: false, fade: 0.06, speed: 1.3 });
 };
 bandits.onAlert = () => { sfx('alert'); say('Bandits!', 1400); };
 bandits.onKill = (b) => {
@@ -141,7 +170,7 @@ function specialUpdate(dt) {
       sp.fallAt = sp.t + 0.32;                                               // a beat of silence, then they fall
     }
     if (sp.t >= sp.fallAt && sp.victims) {
-      for (const b of sp.victims) { if (b.dead) continue; const d = b.root.position.clone().sub(sp.from).setY(0).normalize(); bandits.hit(b, sp.dir.clone().multiplyScalar(0.6).add(d.multiplyScalar(0.4)).normalize(), PLANT === 'specials' ? 0 : 3); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), sp.dir, true); }
+      for (const b of sp.victims) { if (b.dead) continue; const d = b.root.position.clone().sub(sp.from).setY(0).normalize(); bandits.hit(b, sp.dir.clone().multiplyScalar(0.6).add(d.multiplyScalar(0.4)).normalize(), PLANT === 'specials' ? 0 : 4, { breaksGuard: true }); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), sp.dir, true); }
       if (sp.victims.size) { sfx('cut'); slow = Math.max(slow, 0.9); trauma = Math.min(1, trauma + 0.5); }
       sp.victims = null; setTimeout(() => { if (pc.special === sp) pc.special = null; }, 250);
     }
@@ -158,7 +187,7 @@ function specialUpdate(dt) {
       let n = 0;
       for (const b of bandits.alive()) {
         const d = b.root.position.clone().sub(pos); d.y = 0; if (d.length() > 3.6) continue;
-        n++; bandits.hit(b, d.normalize(), PLANT === 'specials' ? 0 : (last ? 2 : 1)); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), d, true);
+        n++; bandits.hit(b, d.normalize(), PLANT === 'specials' ? 0 : 2, { breaksGuard: true, hold: !last }); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), d, true);
       }
       sfx(n ? 'cut' : 'swing'); trauma = Math.min(1, trauma + (last ? 0.55 : 0.25)); freeze = n ? 0.06 : 0; if (last) slow = Math.max(slow, 0.5);
     }
@@ -184,18 +213,38 @@ function frame(now) {
   move.set(0, 0, 0);
   if (pc.alive) {
     move.addScaledVector(fwd, inp.my).addScaledVector(right, inp.mx);
-    if (inp.strike && !pc.special) { if (!pc.strike && pc.roll <= 0) strike(0); else if (pc.strike && pc.strike.i < 2 && pc.strike.t / pc.strike.dur > 0.35) pc.queued = true; }
+    if (inp.strike && !pc.special) {
+      if (!pc.strike && pc.roll <= 0) { if (inp.run && vel.length() > 6) strike(-1, DASH_STRIKE); else strike(0); }
+      else if (pc.strike && pc.strike.i >= 0 && pc.strike.i < 2) pc.queued = true;           // buffered: it fires at the cancel window
+    }
     if (inp.dash && pc.ki >= 50 && !pc.strike && !pc.special && pc.roll <= 0) dashSpecial();
     if (inp.storm && pc.ki >= 100 && !pc.strike && !pc.special && pc.roll <= 0) stormSpecial();
-    if (inp.roll && pc.roll <= 0 && !pc.strike && !pc.special) { pc.roll = 0.62; pc.invuln = 0.45; ronin.play('Roll', { loop: false, fade: 0.06, speed: 1.25 }); sfx('roll'); if (move.lengthSq() > 0.01) facing = Math.atan2(move.x, move.z); }
+    const canDodge = !pc.special && (!pc.strike || pc.strike.t > pc.strike.impact + 0.05);      // a dodge cancels a strike after its impact
+    if (inp.roll && pc.roll <= 0 && canDodge) {
+      pc.strike = null; pc.roll = 0.42; pc.invuln = 0.233; sfx('roll');
+      const mv = move.lengthSq() > 0.01 ? move.clone().normalize() : new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+      const fx = Math.sin(facing), fz = Math.cos(facing), along = mv.x * fx + mv.z * fz, side = mv.x * fz - mv.z * fx;
+      pc.rollDir = mv;
+      const clip = along > 0.5 ? 'Roll' : along < -0.5 ? 'dodge-back' : side > 0 ? 'dodge-left' : 'dodge-right';
+      ronin.play(clip, { loop: false, fade: 0.05, speed: clip === 'Roll' ? 1.6 : 1.5 });
+    }
   }
-  let speed = inp.run ? 7.5 : 3.6;
-  if (pc.strike) { speed = 0.9; pc.strike.t += dt; }
-  if (move.lengthSq() > 1e-4 && pc.roll <= 0 && !pc.strike) { const tgt = Math.atan2(move.x, move.z); let d = tgt - facing; d = Math.atan2(Math.sin(d), Math.cos(d)); facing += d * Math.min(1, dt * 12); }
-  if (pc.strike && move.lengthSq() > 1e-4 && pc.strike.t < 0.12) facing = Math.atan2(move.x, move.z);    // aim the first instant of a strike
-  let vx = move.x * speed, vz = move.z * speed;
-  if (pc.roll > 0) { pc.roll -= dt; vx = Math.sin(facing) * 7.5; vz = Math.cos(facing) * 7.5; }
-  if (pc.strike) { const lunge = pc.strike.t / pc.strike.dur < 0.4 ? 2.2 : 0; vx += Math.sin(facing) * lunge; vz += Math.cos(facing) * lunge; }
+  let speed = inp.run ? 8.0 : 5.2;                                       // Overgrowth's numbers: 8 m/s on the run
+  if (pc.strike) { speed = 0; pc.strike.t += dt; }
+  if (move.lengthSq() > 1e-4 && pc.roll <= 0 && !pc.strike) { const tgt = Math.atan2(move.x, move.z); let d = tgt - facing; d = Math.atan2(Math.sin(d), Math.cos(d)); facing += d * Math.min(1, dt * 16); }
+  // accelerate toward the wanted velocity at 35 m/s² (Overgrowth), so a start and a turn have weight but never lag
+  { const want = new THREE.Vector2(move.x * speed, move.z * speed), dv = want.sub(vel), max = 35 * dt; if (dv.length() > max) dv.setLength(max); vel.add(dv); }
+  let vx = vel.x, vz = vel.y;
+  if (pc.roll > 0) { pc.roll -= dt; const k = pc.roll > 0.14 ? 11 : 5; vx = pc.rollDir.x * k; vz = pc.rollDir.z * k; vel.set(vx * 0.5, vz * 0.5); }
+  if (pc.strike) {                                                        // the warp: cover the gap to reach by the impact, then plant
+    const st = pc.strike, fw = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+    if (st.t < st.impact) { vx = fw.x * st.lunge; vz = fw.z * st.lunge; } else { vx = vz = 0; }
+    vel.set(0, 0);
+    if (st.target && !st.target.dead && st.t < st.impact) { const to = new THREE.Vector3().subVectors(st.target.root.position, pos); facing = Math.atan2(to.x, to.z); }
+    // the chain: a buffered press starts the next strike at impact +166 ms (a hit) or +200 ms (a miss)
+    if (pc.queued && st.i >= 0 && st.i < 2 && st.t >= st.impact + (st.landed ? 0.166 : 0.2)) strike(st.i + 1);
+  }
+  if (pc.knock && pc.knock.left > 0) { const step = Math.min(pc.knock.left, 4 * dt); pc.knock.left -= step; vx += pc.knock.dir.x * step / Math.max(dt, 1e-3); vz += pc.knock.dir.z * step / Math.max(dt, 1e-3); }
   pc.invuln -= dt;
   if (pc.special) { const sv = specialUpdate(dt); vx = sv.vx; vz = sv.vz; }
   if (!pc.alive) { vx = vz = 0; pc.deadT += realDt; if (pc.deadT > 4) respawn(); }
@@ -203,18 +252,20 @@ function frame(now) {
   while (acc >= STEP) { player.step(STEP, vx, vz, jump); jump = false; P.jolt.Step(STEP, 1); acc -= STEP; }
   player.position(pos);
   ronin.root.position.copy(pos); ronin.root.rotation.y = facing;
-  { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
+  { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
   ronin.update(dt);
 
   // the blow lands in its window: every bandit in front, within reach
   if (pc.strike && !pc.strike.hit) {
-    const s = COMBO[pc.strike.i], f = pc.strike.t / pc.strike.dur;
-    if (f >= s.at[0] && f <= s.at[1] && PLANT !== 'blade') {
+    const st = pc.strike, s = st.def;
+    if (st.t >= st.impact - 0.06 && st.t <= st.impact + 0.08 && PLANT !== 'blade') {
       const facingV = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
       for (const b of bandits.alive()) {
         const to = new THREE.Vector3().subVectors(b.root.position, pos); to.y = 0; const d = to.length(); to.normalize();
-        if (d < 2.7 && facingV.dot(to) > 0.25) {
-          pc.strike.hit = true; bandits.hit(b, to, s.power); sfx('cut'); pc.ki = Math.min(100, pc.ki + 12);
+        if (d < 2.6 && facingV.dot(to) > 0.2) {
+          st.hit = true; const r = bandits.hit(b, to, s.power, { breaksGuard: s.power > 1 });
+          if (r === 'blocked') { sfx('clash'); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(to, -0.5), to.clone().negate(), false); freeze = 0.05; trauma = Math.min(1, trauma + 0.2); pc.queued = false; continue; }
+          st.landed = true; sfx('cut'); pc.ki = Math.min(100, pc.ki + 12);
           vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), to, true);
           freeze = s.power > 1 || b.dead ? 0.11 : 0.07; trauma = Math.min(1, trauma + (s.power > 1 ? 0.45 : 0.28));
         }
@@ -264,6 +315,6 @@ function memory() {
 }
 
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
-window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial,
+window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE,
   get facing() { return facing; }, set facing(v) { facing = v; } };
 requestAnimationFrame(frame);

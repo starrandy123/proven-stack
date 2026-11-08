@@ -80,6 +80,12 @@
       "by": "Frank Force (KilledByAPixel)",
       "license": "MIT",
       "from": "vendor/zzfx/ (npm, sha512-checked; licence in vendor/zzfx/LICENSE.txt; home https://github.com/KilledByAPixel/ZzFX)"
+    },
+    {
+      "what": "21 animation clips from the Mesh2Motion human library (strafes, walking backwards, dodges, defend and blocks, weapon draw, two-handed swings, overhead slam, spear thrust, dizzy, hurt idle, four deaths and a spin death, a spin kick), retargeted onto the Quaternius rig at load by three.js SkeletonUtils.retargetClip",
+      "by": "Mesh2Motion contributors (the human rig and animations credit Quaternius)",
+      "license": "CC0-1.0",
+      "from": "assets/mesh2motion/ (github.com/Mesh2Motion/mesh2motion-app static/assets/human/animations; LICENSE-CC0.MD: 'All 3d models, blend files, rigs, animations · CC0 1.0 Universal')"
     }
   ]
 }

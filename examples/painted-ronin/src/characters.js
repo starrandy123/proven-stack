@@ -8,16 +8,58 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 const loader = new GLTFLoader();
 const load = (url) => new Promise((ok, no) => loader.load(url, ok, undefined, no));
 
+// Mesh2Motion's CC0 human library (on Quaternius's rig, its bones a little turned from ours: the neck 28°, the clavicles 17°), carried onto
+// our rig by three.js's own SkeletonUtils.retargetClip, which solves each frame through both rest poses
+export const M2M = ['strafe-left', 'strafe-right', 'walk-backwards', 'dodge-back', 'dodge-left', 'dodge-right', 'defend', 'weapon-block',
+  'sword-block', 'weapon-draw', 'two-handed-horizontal-swing', 'two-handed-overhead-slam', 'spear-thrust', 'dizzy', 'idle-hurt',
+  'death-a', 'death-b', 'death-c', 'death-d', 'death-spin-rm', 'kick-spin'];
+
 export async function loadCharacterKit() {
-  const [ronin, bandit, a1, a2] = await Promise.all(['assets/quaternius/ronin.glb', 'assets/quaternius/bandit.glb',
-    'assets/quaternius/anims_ual1.glb', 'assets/quaternius/anims_ual2.glb'].map(load));
+  const [ronin, bandit, a1, a2, ...m2m] = await Promise.all(['assets/quaternius/ronin.glb', 'assets/quaternius/bandit.glb',
+    'assets/quaternius/anims_ual1.glb', 'assets/quaternius/anims_ual2.glb', ...M2M.map((n) => `assets/mesh2motion/${n}.glb`)].map(load));
   const clips = {};
-  for (const c of [...a1.animations, ...a2.animations]) {
-    // the clips move the root bone's translation; the game moves the body, so the root stays where physics puts it
-    c.tracks = c.tracks.filter((t) => !(t.name.startsWith('root.') && t.name.endsWith('.position')));
-    clips[c.name] = c;
-  }
+  const keepInPlace = (c) => { c.tracks = c.tracks.filter((t) => !((t.name.startsWith('root.') || t.name.startsWith('pelvis.')) && t.name.endsWith('.position') && false) && !(t.name.startsWith('root.') && t.name.endsWith('.position'))); return c; };
+  for (const c of [...a1.animations, ...a2.animations]) clips[c.name] = keepInPlace(c);
+  // the target: a fresh copy of the ronin in its bind pose
+  const target = cloneSkinned(ronin.scene); target.updateMatrixWorld(true);
+  const tBones = []; target.traverse((o) => { if (o.isBone) tBones.push(o); });   // traversal order: every parent before its children
+  M2M.forEach((n, i) => { for (const clip of m2m[i].animations) { const rc = retargetWorld(m2m[i].scene, clip, tBones, { Head: 'head' }); rc.name = n; clips[n] = rc; } });
   return { ronin: ronin.scene, bandit: bandit.scene, clips };
+}
+
+// Retarget by world rotations through both rest poses (the method of three.js SkeletonUtils.retarget, written out here: its
+// retargetClip sampled a static source when the source is a bare skeleton with no mesh). For every bone, each frame:
+//   target world = (source world now × source world at rest⁻¹) × target world at rest;  target local = parent world⁻¹ × target world
+// The hips keep their own bob (their height change), never the clip's travel: the game moves the body.
+function retargetWorld(srcScene, clip, tBones, names = {}, fps = 30) {
+  const Q = THREE.Quaternion, srcBones = {};
+  srcScene.traverse((o) => { if (o.isBone) srcBones[o.name] = o; });
+  srcScene.updateMatrixWorld(true);
+  const restS = new Map(), restT = new Map(), restPos = {};
+  for (const tb of tBones) {
+    const sb = srcBones[names[tb.name] || tb.name]; restT.set(tb, tb.getWorldQuaternion(new Q()));
+    if (sb) restS.set(tb, sb.getWorldQuaternion(new Q()));
+  }
+  const sPel = srcBones.pelvis, tPel = tBones.find((b) => b.name === 'pelvis');
+  if (sPel && tPel) restPos.s = sPel.position.clone(), restPos.t = tPel.position.clone();
+  const mixer = new THREE.AnimationMixer(srcScene), action = mixer.clipAction(clip); action.play();
+  const N = Math.max(2, Math.round(clip.duration * fps) + 1), times = new Float32Array(N);
+  const vals = new Map(tBones.map((b) => [b, new Float32Array(N * 4)])), pelY = new Float32Array(N * 3);
+  const world = new Map(), tmp = new Q(), inv = new Q();
+  for (let i = 0; i < N; i++) {
+    const t = Math.min(clip.duration, i / fps); times[i] = t; action.time = t; mixer.update(0); srcScene.updateMatrixWorld(true);
+    for (const tb of tBones) {
+      const sb = srcBones[names[tb.name] || tb.name];
+      const w = sb && restS.has(tb) ? sb.getWorldQuaternion(new Q()).multiply(inv.copy(restS.get(tb)).invert()).multiply(restT.get(tb)) : restT.get(tb).clone();
+      world.set(tb, w);
+      const pw = world.get(tb.parent) || (tb.parent ? tb.parent.getWorldQuaternion(new Q()) : new Q());
+      tmp.copy(pw).invert().multiply(w); tmp.toArray(vals.get(tb), i * 4);
+    }
+    if (restPos.s) { const dy = sPel.position.y - restPos.s.y; pelY.set([restPos.t.x, restPos.t.y + dy, restPos.t.z], i * 3); }
+  }
+  const tracks = tBones.filter((b) => b.name !== 'root').map((b) => new THREE.QuaternionKeyframeTrack(b.name + '.quaternion', times, vals.get(b)));
+  if (restPos.s) tracks.push(new THREE.VectorKeyframeTrack('pelvis.position', times, pelY));
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
 }
 
 // ── the samurai pieces ──
@@ -121,10 +163,11 @@ export class Person {
   // idle / walk / jog / sprint by the speed the body actually moves
   move(speed) {
     if (this.oneShot) return;
-    const name = speed < 0.3 ? (this.armed ? 'Sword_Idle' : 'Idle_Loop') : speed < 2.6 ? 'Walk_Loop' : speed < 5.6 ? 'Jog_Fwd_Loop' : 'Sprint_Loop';
+    const name = speed < 0.3 ? (this.armed ? 'Sword_Idle' : 'Idle_Loop') : speed < 2.2 ? 'Walk_Loop' : speed < 6.0 ? 'Jog_Fwd_Loop' : 'Sprint_Loop';
     const a = this.play(name, { loop: true, fade: 0.22 });
     if (name === 'Walk_Loop') a.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 1.6, 0.6, 1.4));
-    if (name === 'Jog_Fwd_Loop') a.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 4.0, 0.7, 1.35));
+    if (name === 'Jog_Fwd_Loop') a.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 4.6, 0.8, 1.35));
+    if (name === 'Sprint_Loop') a.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 7.5, 0.9, 1.3));
   }
   update(dt) { this.mixer.update(dt); }
 }

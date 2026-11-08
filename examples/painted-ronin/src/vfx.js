@@ -147,8 +147,51 @@ export function createVfx(scene, { phone = false } = {}) {
     }
   }
 
-  return {
-    batch, hit, fire, trailUpdate, stroke, strokeUpdate,
-    update(dt, playerPos) { leaves.emitter.position.set(playerPos.x, playerPos.y + 10, playerPos.z); batch.update(dt); },
+  // a slash arc (Gabriel Aguiar's crescent-mesh method), shaped from the blade's REAL path: the base and the tip of the sword through
+  // the strike, sampled at 60 Hz off the clip (assets/clipdata.json). It draws itself as the blade passes, then fades. Gold-white at
+  // the cutting edge, red ink toward the hilt, the dry-brush texture through it: a stroke of paint, in the game's own look.
+  const arcs = [], arcMat = (heavy) => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { progress: { value: 0 }, fade: { value: 1 }, brush: { value: brushTex }, heavy: { value: heavy ? 1 : 0 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform float progress; uniform float fade; uniform sampler2D brush; uniform float heavy; varying vec2 vUv;
+      void main(){
+        float lead = smoothstep(progress, progress - 0.18, vUv.x);                 // drawn up to the blade, a soft leading edge
+        float tail = smoothstep(0.0, 0.12, vUv.x);
+        float b = texture2D(brush, vec2(vUv.x * 0.92 + 0.04, vUv.y)).a;
+        float edge = smoothstep(0.0, 0.4, vUv.y) * (1.0 - smoothstep(0.94, 1.0, vUv.y));
+        vec3 ink = mix(vec3(0.42, 0.04, 0.03), vec3(0.08, 0.03, 0.03), heavy * 0.5);
+        vec3 col = mix(ink, vec3(1.0, 0.94, 0.78), smoothstep(0.55, 0.95, vUv.y));
+        float a = lead * tail * edge * (0.55 + 0.45 * b) * fade;
+        if (a < 0.02) discard;
+        gl_FragColor = vec4(col * 1.15, min(1.0, a * 1.1));
+      }` });
+  function slashArc(person, clip, speed, impact, heavy) {
+    const d = this && this.clipdata ? this.clipdata[clip] : api.clipdata && api.clipdata[clip]; if (!d || !d.hits.length) return;
+    const ki = Math.round(d.hits[0] * 60), j0 = Math.max(0, ki - 10), j1 = Math.min(d.tip.length - 1, ki + 5), n = j1 - j0 + 1;
+    if (n < 3) return;
+    const pos = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx = [];
+    for (let j = 0; j < n; j++) {
+      const b = d.base[j0 + j], t = d.tip[j0 + j];
+      const inner = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * 0.2), outer = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * (heavy ? 1.7 : 1.45));
+      pos.set(inner, j * 6); pos.set(outer, j * 6 + 3); uv.set([j / (n - 1), 0, j / (n - 1), 1], j * 4);
+      if (j < n - 1) { const a = j * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
+    const m = new THREE.Mesh(g, arcMat(heavy)); m.frustumCulled = false; m.renderOrder = 5; person.root.add(m);
+    arcs.push({ m, t: 0, start: j0 / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.24 });
+  }
+  function arcUpdate(dt) {
+    for (let i = arcs.length - 1; i >= 0; i--) {
+      const a = arcs[i]; a.t += dt; const u = a.m.material.uniforms;
+      u.progress.value = THREE.MathUtils.clamp((a.t - a.start) / a.swing, 0, 1) * 1.18;
+      const after = a.t - a.start - a.swing; u.fade.value = after > 0 ? Math.max(0, 1 - after / a.fadeT) : 1;
+      if (after > a.fadeT) { a.m.removeFromParent(); a.m.geometry.dispose(); a.m.material.dispose(); arcs.splice(i, 1); }
+    }
+  }
+
+  const api = {
+    batch, hit, fire, trailUpdate, stroke, strokeUpdate, slashArc, arcUpdate, clipdata: null,
+    update(dt, playerPos) { leaves.emitter.position.set(playerPos.x, playerPos.y + 10, playerPos.z); batch.update(dt); arcUpdate(dt); },
   };
+  return api;
 }

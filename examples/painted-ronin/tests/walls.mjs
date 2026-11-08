@@ -6,7 +6,9 @@
 //   W4 combat    — the ronin's strikes take a bandit down within six blows
 //   W5 phone     — at a phone's size the page's own memory count stays under 192 MB (NotesMosaic's ceiling)
 //   W6 dash      — 閃: two bandits standing in the blade's line both fall
-//   W7 storm     — 嵐: three bandits around the ronin all fall
+//   W7 storm     — 嵐: the bandits around the ronin fall, those beyond its reach stand
+//   W8 turns     — four bandits fight him 8 s: the attack budget is never overspent (≤ 10: two cuts, or a combo and a cut), never
+//                  more than two strike at once, and no two impacts land under 300 ms apart (Kingdoms of Amalur; Ghost of Tsushima)
 //   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee]   (a plant must turn its wall red: exit 1)
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,25 +77,46 @@ async function open(query, viewport = { width: 960, height: 540 }) {
   wall('W4 combat', r.dead, `down in ${r.blows} blow(s)`);
   await page.close();
 
-  // W6 + W7: the specials, on camp 0's four bandits placed by hand (teleported on their own navmesh, told to hold still)
+  // W6 + W7: the specials, each on a fresh page with camp 0's bandits placed by hand (teleported on their own navmesh, told to hold)
+  const special = async (kind) => {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async (kind) => {
+      const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const place = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+      for (const b of camp) b.state = 'hold';                                // nobody else walks into the test
+      const p = G.ronin.root.position;
+      if (kind === 'dash') { G.facing = Math.atan2(-1, 0); place(camp[0], p.x - 3, p.z); place(camp[1], p.x - 6, p.z + 0.4); place(camp[2], p.x + 8, p.z + 8); place(camp[3], p.x + 9, p.z - 8); }
+      else { place(camp[0], p.x + 2, p.z); place(camp[1], p.x - 1.5, p.z + 1.5); place(camp[2], p.x + 9, p.z + 9); place(camp[3], p.x - 9, p.z - 9); }
+      await wait(300); G.pc.ki = 100; kind === 'dash' ? G.dashSpecial() : G.stormSpecial(); await wait(kind === 'dash' ? 1600 : 3500);
+      return { down: [camp[0].dead, camp[1].dead], spared: [camp[2].dead, camp[3].dead] };
+    }, kind);
+    await page.close();
+    return { ...r, errors };
+  };
+  { const r = await special('dash'); wall('W6 dash', r.down.every(Boolean) && !r.spared.some(Boolean) && !r.errors.length, `in the line: ${r.down.filter(Boolean).length}/2 down · out of it: ${r.spared.filter((d) => !d).length}/2 standing`); }
+  { const r = await special('storm'); wall('W7 storm', r.down.every(Boolean) && !r.spared.some(Boolean) && !r.errors.length, `around him: ${r.down.filter(Boolean).length}/2 down · beyond 3.6 m: ${r.spared.filter((d) => !d).length}/2 standing`); }
+
+  // W8: turn-taking, measured on camp 0's four live bandits while the ronin stands among them (invulnerable, not striking)
   {
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
-      const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
-      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
-      const place = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
-      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(400);
-      G.facing = Math.atan2(-1, 0);                                         // facing -x, toward the camp
-      place(camp[0], x0 - 3, z0); place(camp[1], x0 - 6, z0 + 0.4); await wait(300);
-      G.pc.ki = 100; G.dashSpecial(); await wait(1600);
-      const dash = [camp[0].dead, camp[1].dead];
-      const p = G.ronin.root.position; place(camp[2], p.x + 2, p.z); place(camp[3], p.x - 1.5, p.z + 1.5);
-      const third = G.bandits.list.find((b) => b.nav === G.navs[1]);         // a bandit from camp 1 cannot stand here (another navmesh): two suffice
-      await wait(300); G.pc.ki = 100; G.stormSpecial(); await wait(3500);
-      return { dash, storm: [camp[2].dead, camp[3].dead], ki: G.pc.ki };
+      const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const c = G.land.spots.camps[0]; G.player.setPosition(c.x + 2, G.land.groundY(c.x + 2, c.y) + 0.3, c.y);
+      const impacts = [], seen = { maxSpent: 0, maxAttackers: 0 };
+      const was = G.bandits.onBlow; G.bandits.onBlow = (b, d, k) => { impacts.push(G.bandits.time); };
+      for (let i = 0; i < 80; i++) {
+        G.pc.invuln = 1; G.pc.hp = 100; await wait(100);
+        seen.maxSpent = Math.max(seen.maxSpent, G.bandits.spent);
+        seen.maxAttackers = Math.max(seen.maxAttackers, G.bandits.list.filter((b) => b.state === 'attack').length);
+      }
+      G.bandits.onBlow = was;
+      let minGap = 9; for (let i = 1; i < impacts.length; i++) minGap = Math.min(minGap, impacts[i] - impacts[i - 1]);
+      return { ...seen, impacts: impacts.length, minGap: +minGap.toFixed(3) };
     });
-    wall('W6 dash', r.dash.every(Boolean) && !errors.length, `in-line bandits down: ${r.dash.filter(Boolean).length}/2`);
-    wall('W7 storm', r.storm.every(Boolean) && !errors.length, `bandits around him down: ${r.storm.filter(Boolean).length}/2`);
+    wall('W8 turns', r.maxSpent <= 10 && r.maxAttackers <= 2 && r.minGap >= 0.29 && r.impacts >= 3 && !errors.length,
+      `budget peak ${r.maxSpent}/10 · at most ${r.maxAttackers} striking at once · ${r.impacts} impacts, closest ${r.minGap} s apart`);
     await page.close();
   }
 

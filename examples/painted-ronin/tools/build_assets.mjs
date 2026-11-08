@@ -102,7 +102,8 @@ async function buildCharacter(outfit, texRel, out, dye) {
 // the clips the game plays, from both libraries, with the mannequin mesh removed and keyframes resampled
 const CLIPS = {
   [UAL1]: ['Idle_Loop', 'Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Roll', 'Death01', 'Hit_Chest', 'Hit_Head', 'Jump_Start', 'Jump_Loop', 'Jump_Land', 'Sword_Idle', 'Sword_Attack'],
-  [UAL2]: ['Sword_Regular_A', 'Sword_Regular_B', 'Sword_Regular_C', 'Sword_Heavy_Combo', 'Sword_Block', 'Sword_Dash', 'Hit_Knockback', 'Idle_No_Loop'],
+  [UAL2]: ['Sword_Regular_A', 'Sword_Regular_B', 'Sword_Regular_C', 'Sword_Heavy_Combo', 'Sword_Block', 'Sword_Dash', 'Hit_Knockback', 'Idle_No_Loop',
+    'Sword_Regular_A_Rec', 'Sword_Regular_B_Rec', 'Sword_Regular_Combo', 'Melee_Hook', 'Slide_Start', 'Slide_Loop', 'Slide_Exit', 'NinjaJump_Start', 'NinjaJump_Idle_Loop', 'NinjaJump_Land'],
 };
 async function buildAnims(file, out) {
   const doc = await io.read(file), root = doc.getRoot();
