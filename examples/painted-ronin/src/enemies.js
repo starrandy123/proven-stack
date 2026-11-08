@@ -8,7 +8,7 @@ import { Ragdoll } from './ragdoll.js';
 const TINTS = ['#ffffff', '#e8d2b0', '#c9b8a6', '#d6c3a0'].map((c) => new THREE.Color(c));
 
 export class Bandits {
-  constructor(scene, kit, navs, P, rest, land, { perCamp = 4 } = {}) {
+  constructor(scene, kit, navs, P, rest, land, { perCamp = 4, frozen = false } = {}) {
     this.scene = scene; this.P = P; this.rest = rest; this.land = land; this.list = []; this.ragdolls = [];
     this.navs = navs; let k = 0;
     for (const nav of navs) {
@@ -18,7 +18,7 @@ export class Bandits {
         const want = new THREE.Vector3(nav.center.x + Math.cos(a) * r, 0, nav.center.y + Math.sin(a) * r);
         want.y = land.groundY(want.x, want.z);
         const { point } = nav.query.findClosestPoint(want);
-        const agent = nav.crowd.addAgent(point, { radius: 0.42, height: 1.8, maxAcceleration: 14, maxSpeed: 4.3, collisionQueryRange: 2.5, pathOptimizationRange: 12, separationWeight: 2.2 });
+        const agent = nav.crowd.addAgent(point, { radius: 0.42, height: 1.8, maxAcceleration: 14, maxSpeed: frozen ? 0 : 4.3, collisionQueryRange: 2.5, pathOptimizationRange: 12, separationWeight: 2.2 });
         b.agent = agent; b.nav = nav; b.home = new THREE.Vector3(point.x, point.y, point.z);
         b.state = 'idle'; b.hp = 3; b.cool = 0; b.facing = Math.random() * Math.PI * 2; b.repath = 0;
         b.root.position.copy(b.home); scene.add(b.root);

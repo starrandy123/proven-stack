@@ -101,8 +101,9 @@ void main() {
 
 export class PainterlyPass extends Pass {
   // scale: the filter's resolution against the screen (0.5 on a phone); radiusNear/radiusFar: the brush in texels near and far
-  constructor(camera, { scale = 0.6, radiusNear = 2, radiusFar = 6, strength = 1 } = {}) {
+  constructor(camera, { scale = 0.6, targetHeight = 0, radiusNear = 2, radiusFar = 6, strength = 1 } = {}) {
     super('PainterlyPass');
+    this.targetHeight = targetHeight;
     this.needsDepthTexture = true;
     this.cameraRef = camera; this.scale = scale; this.strength = strength;
     const rt = () => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
@@ -118,7 +119,10 @@ export class PainterlyPass extends Pass {
   }
   setDepthTexture(depthTexture) { this.kuwaharaMat.uniforms.depthBuffer.value = depthTexture; this.kuwaharaMat.uniforms.useDepth.value = depthTexture ? 1 : 0; }
   setSize(width, height) {
-    const w = Math.max(1, Math.round(width * this.scale)), h = Math.max(1, Math.round(height * this.scale));
+    // the brush is in texels of THIS target: run it at a fixed height (~560 px) on every screen, so the oil paint reads the same on a
+    // phone, a laptop and a 1080p film (a fixed fraction of the screen made the strokes vanish on large screens)
+    const k = this.targetHeight ? Math.min(1, this.targetHeight / height) : this.scale;
+    const w = Math.max(1, Math.round(width * k)), h = Math.max(1, Math.round(height * k));
     for (const t of [this.tensorRT, this.blurRT, this.paintRT]) t.setSize(w, h);
     this.tensorMat.uniforms.resolution.value.set(width, height, 1 / width, 1 / height);
     this.kuwaharaMat.uniforms.resolution.value.set(w, h, 1 / w, 1 / h);

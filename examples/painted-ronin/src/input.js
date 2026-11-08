@@ -5,7 +5,7 @@ export function createInput(root) {
   const press = (k) => { if (!s.held.has(k)) s.edges.add(k); s.held.add(k); };
   const release = (k) => s.held.delete(k);
   const KEYS = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
-    ShiftLeft: 'run', ShiftRight: 'run', Space: 'jump', KeyF: 'strike', KeyJ: 'strike', ControlLeft: 'roll', KeyK: 'roll', KeyC: 'roll' };
+    ShiftLeft: 'run', ShiftRight: 'run', Space: 'jump', KeyF: 'strike', KeyJ: 'strike', ControlLeft: 'roll', KeyK: 'roll', KeyC: 'roll', KeyQ: 'dash', KeyE: 'storm' };
   addEventListener('keydown', (e) => { const k = KEYS[e.code]; if (k) { press(k); e.preventDefault(); } });
   addEventListener('keyup', (e) => { const k = KEYS[e.code]; if (k) release(k); });
   addEventListener('blur', () => s.held.clear());
@@ -29,7 +29,7 @@ export function createInput(root) {
     b.addEventListener('touchstart', (e) => { press(key); b.classList.add('down'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
     b.addEventListener('touchend', (e) => { release(key); b.classList.remove('down'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
     ui.appendChild(b); return b; };
-  btn('strike', '斬', 'strike'); btn('roll', '転', 'roll'); btn('jump', '跳', 'jump');
+  btn('strike', '斬', 'strike'); btn('roll', '転', 'roll'); btn('jump', '跳', 'jump'); btn('dash', '閃', 'dash'); btn('storm', '嵐', 'storm');
   let stickId = null, lookId = null, sx = 0, sy = 0, lx = 0, ly = 0;
   const R = 56;
   canvas.addEventListener('touchstart', (e) => {
@@ -65,7 +65,7 @@ export function createInput(root) {
         run = s.held.has('run');
         const l = Math.hypot(mx, my); if (l > 1) { mx /= l; my /= l; }
       }
-      const out = { mx, my, run, dx: s.look.dx, dy: s.look.dy, strike: s.edges.has('strike'), roll: s.edges.has('roll'), jump: s.edges.has('jump'), holdStrike: s.held.has('strike') };
+      const out = { mx, my, run, dx: s.look.dx, dy: s.look.dy, strike: s.edges.has('strike'), roll: s.edges.has('roll'), jump: s.edges.has('jump'), dash: s.edges.has('dash'), storm: s.edges.has('storm'), holdStrike: s.held.has('strike') };
       s.look.dx = s.look.dy = 0; s.edges.clear();
       return out;
     },

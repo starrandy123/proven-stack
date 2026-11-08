@@ -65,12 +65,20 @@
       "imports": {
         "jolt-physics": "jolt-physics.wasm-compat.js"
       },
-      "notes": "Single-threaded wasm-compat build (its binary is inside the .js, so no .wasm fetch). Its fixed memory is 128 MB: pass --jolt-mb to give a phone back what the game does not use (measure first)."
+      "notes": "Single-threaded wasm-compat build (its binary is inside the .js, so no .wasm fetch). Its fixed memory is 128 MB: pass --jolt-mb to give a phone back what the game does not use (measure first).",
+      "contains": [
+        {
+          "what": "Jolt Physics (C++), compiled into jolt-physics.wasm-compat.js",
+          "by": "Jorrit Rouwe",
+          "license": "MIT",
+          "home": "https://github.com/jrouwe/JoltPhysics"
+        }
+      ]
     },
     "recast": {
       "title": "Recast & Detour (recast-navigation-js)",
       "by": "Mikko Mononen and the Recast contributors (C++); Isaac Mason (JS)",
-      "license": "MIT (Recast & Detour: Zlib)",
+      "license": "MIT",
       "home": "https://github.com/isaac-mason/recast-navigation-js",
       "does": "Navigation meshes baked from your level's geometry, path finding, and Detour crowds: many agents steering around each other and obstacles.",
       "proof": [
@@ -123,6 +131,14 @@
         "lines/LineMaterial.js",
         "lines/LineSegments2.js",
         "lines/LineSegmentsGeometry.js"
+      ],
+      "contains": [
+        {
+          "what": "Recast & Detour (C++), compiled into recast-navigation.wasm-compat.js",
+          "by": "Mikko Mononen and the Recast & Detour contributors",
+          "license": "Zlib",
+          "home": "https://github.com/recastnavigation/recastnavigation"
+        }
       ]
     },
     "quarks": {

@@ -37,7 +37,6 @@ export function createVfx(scene, { phone = false } = {}) {
   leaves.addBehavior(new ApplyForce(new QV3(0.35, -1, 0.2), new ConstantValue(0.55)));
   leaves.addBehavior(new Noise(new ConstantValue(0.4), new ConstantValue(1.2), new ConstantValue(1), new ConstantValue(2)));
   leaves.addBehavior(new RotationOverLife(new IntervalValue(-2, 2)));
-  leaves.addBehavior(new ColorOverLife(new Gradient([[new QV3(1, 1, 1), 0], [new QV3(1, 1, 1), 1]], [[0, 0], [1, 0.08], [1, 0.85], [0, 1]])));
   scene.add(leaves.emitter); batch.addSystem(leaves);
 
   // a hit: sparks off the steel and a spray of red ink
@@ -109,8 +108,47 @@ export function createVfx(scene, { phone = false } = {}) {
     trailGeo.attributes.position.needsUpdate = true; trailGeo.attributes.alpha.needsUpdate = true;
   }
 
+  // an ink stroke hung in the air: a dry brush's streaks painted on a canvas, laid on a quad from a to b, fading out
+  const brushTex = (() => {                                                 // a sumi-e brush stroke: bristles that taper, dry out and fade at both ends
+    const W = 1024, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    for (let i = 0; i < 90; i++) {
+      const y0 = H / 2 + (Math.random() - 0.5) * H * 0.62, w = 1 + Math.random() * 4.5, dry = 0.55 + Math.random() * 0.45;
+      const x0 = 30 + Math.random() * 120, x1 = W - 40 - Math.random() * 260, bend = (Math.random() - 0.5) * 18;
+      for (let x = x0; x < x1; x += 3) {                                 // segment by segment: width tapers, ink skips where the brush dries
+        const t = (x - x0) / (x1 - x0), taper = Math.sin(Math.PI * Math.min(1, t * 1.15)) ** 0.6;
+        if (Math.random() > dry + (1 - t) * 0.4) continue;
+        g.fillStyle = `rgba(255,255,255,${(0.45 + 0.55 * Math.random()) * taper})`;
+        g.fillRect(x, y0 + bend * Math.sin(t * Math.PI) - w * taper / 2, 3.2, Math.max(0.6, w * taper));
+      }
+    }
+    g.globalCompositeOperation = 'destination-in';                       // the whole stroke fades in at the start, out at the tail
+    const fade = g.createLinearGradient(0, 0, W, 0); fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(0.06, 'rgba(0,0,0,1)'); fade.addColorStop(0.7, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = fade; g.fillRect(0, 0, W, H);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const strokes = [];
+  function stroke(a, b, { width = 0.45, color = '#1a0d0b', life = 1.1, up = new THREE.Vector3(0, 1, 0) } = {}) {
+    const dir = b.clone().sub(a), len = dir.length(); if (len < 0.1) return;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ map: brushTex, color, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.9, fog: false }));
+    m.position.copy(a).add(b).multiplyScalar(0.5); m.scale.x = 0.01;
+    scene.add(m); strokes.push({ m, t: 0, life, dir: dir.normalize() });
+  }
+  const _z = new THREE.Vector3(), _y = new THREE.Vector3(), _mm = new THREE.Matrix4();
+  function strokeUpdate(dt, camera) {
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i]; s.t += dt; const k = s.t / s.life;
+      if (camera) {                                                           // turn about its own length to face the camera, like paint on glass
+        _z.copy(camera.position).sub(s.m.position); _z.addScaledVector(s.dir, -_z.dot(s.dir)).normalize();
+        _y.crossVectors(_z, s.dir); s.m.quaternion.setFromRotationMatrix(_mm.makeBasis(s.dir, _y, _z));
+      }
+      s.m.scale.x = Math.min(1, s.t / 0.08);                                 // the brush is drawn in 80 ms, then the ink fades
+      s.m.material.opacity = 0.95 * (1 - Math.max(0, (k - 0.35) / 0.65));
+      if (k >= 1) { scene.remove(s.m); s.m.geometry.dispose(); s.m.material.dispose(); strokes.splice(i, 1); }
+    }
+  }
+
   return {
-    batch, hit, fire, trailUpdate,
+    batch, hit, fire, trailUpdate, stroke, strokeUpdate,
     update(dt, playerPos) { leaves.emitter.position.set(playerPos.x, playerPos.y + 10, playerPos.z); batch.update(dt); },
   };
 }

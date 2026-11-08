@@ -5,6 +5,8 @@
 //   W3 pursuit   — a camp's bandit reaches the ronin through Recast & Detour within 6 s
 //   W4 combat    — the ronin's strikes take a bandit down within six blows
 //   W5 phone     — at a phone's size the page's own memory count stays under 192 MB (NotesMosaic's ceiling)
+//   W6 dash      — 閃: two bandits standing in the blade's line both fall
+//   W7 storm     — 嵐: three bandits around the ronin all fall
 //   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee]   (a plant must turn its wall red: exit 1)
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +24,7 @@ const wall = (name, ok, detail) => { results.push({ name, ok, detail }); console
 async function open(query, viewport = { width: 960, height: 540 }) {
   const page = await browser.newPage({ viewport });
   const errors = []; page.on('pageerror', (e) => errors.push(String(e.message || e)));
-  await page.goto(url + 'index.html?' + query);
+  await page.goto(url + 'index.html?' + query + (plant && !query.includes('plant=') ? (query ? '&' : '') + 'plant=' + plant : ''));
   await page.waitForFunction(() => window.__MOSA_BOOT && window.__MOSA_BOOT.ok === true, null, { timeout: 45000 });
   await page.waitForTimeout(800);
   return { page, errors };
@@ -52,7 +54,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
   await page.close();
 }
 
-if (!plant) {
+{
   // W3 + W4: pursuit and combat at camp 1
   const { page, errors } = await open('test');
   const r = await page.evaluate(async () => {
@@ -72,6 +74,28 @@ if (!plant) {
   wall('W3 pursuit', r.reached !== null && !errors.length, r.reached !== null ? `the bandit reached the ronin in ${r.reached.toFixed(1)} s` : 'never reached him in 6 s');
   wall('W4 combat', r.dead, `down in ${r.blows} blow(s)`);
   await page.close();
+
+  // W6 + W7: the specials, on camp 0's four bandits placed by hand (teleported on their own navmesh, told to hold still)
+  {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const place = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(400);
+      G.facing = Math.atan2(-1, 0);                                         // facing -x, toward the camp
+      place(camp[0], x0 - 3, z0); place(camp[1], x0 - 6, z0 + 0.4); await wait(300);
+      G.pc.ki = 100; G.dashSpecial(); await wait(1600);
+      const dash = [camp[0].dead, camp[1].dead];
+      const p = G.ronin.root.position; place(camp[2], p.x + 2, p.z); place(camp[3], p.x - 1.5, p.z + 1.5);
+      const third = G.bandits.list.find((b) => b.nav === G.navs[1]);         // a bandit from camp 1 cannot stand here (another navmesh): two suffice
+      await wait(300); G.pc.ki = 100; G.stormSpecial(); await wait(3500);
+      return { dash, storm: [camp[2].dead, camp[3].dead], ki: G.pc.ki };
+    });
+    wall('W6 dash', r.dash.every(Boolean) && !errors.length, `in-line bandits down: ${r.dash.filter(Boolean).length}/2`);
+    wall('W7 storm', r.storm.every(Boolean) && !errors.length, `bandits around him down: ${r.storm.filter(Boolean).length}/2`);
+    await page.close();
+  }
 
   // W5: memory at a phone's size
   const ph = await open('', { width: 390, height: 844 });

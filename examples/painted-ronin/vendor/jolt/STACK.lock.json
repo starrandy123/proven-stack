@@ -4,6 +4,14 @@
   "license": "MIT",
   "by": "Jorrit Rouwe",
   "home": "https://github.com/jrouwe/JoltPhysics.js",
+  "contains": [
+    {
+      "what": "Jolt Physics (C++), compiled into jolt-physics.wasm-compat.js",
+      "by": "Jorrit Rouwe",
+      "license": "MIT",
+      "home": "https://github.com/jrouwe/JoltPhysics"
+    }
+  ],
   "packages": [
     {
       "name": "jolt-physics",

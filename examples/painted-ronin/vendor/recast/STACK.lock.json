@@ -1,9 +1,17 @@
 {
   "id": "recast",
   "title": "Recast & Detour (recast-navigation-js)",
-  "license": "MIT (Recast & Detour: Zlib)",
+  "license": "MIT",
   "by": "Mikko Mononen and the Recast contributors (C++); Isaac Mason (JS)",
   "home": "https://github.com/isaac-mason/recast-navigation-js",
+  "contains": [
+    {
+      "what": "Recast & Detour (C++), compiled into recast-navigation.wasm-compat.js",
+      "by": "Mikko Mononen and the Recast & Detour contributors",
+      "license": "Zlib",
+      "home": "https://github.com/recastnavigation/recastnavigation"
+    }
+  ],
   "packages": [
     {
       "name": "@recast-navigation/core",

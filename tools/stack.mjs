@@ -129,7 +129,7 @@ async function vendor(id, gameDir, opts) {
   const lib = CATALOGUE.libraries[id]; if (!lib) die(`unknown library "${id}" (node tools/stack.mjs list)`);
   const dest = path.join(gameDir, 'vendor', id);
   fs.rmSync(dest, { recursive: true, force: true }); fs.mkdirSync(dest, { recursive: true });
-  const lock = { id, title: lib.title, license: lib.license, by: lib.by, home: lib.home, packages: [], files: {} };
+  const lock = { id, title: lib.title, license: lib.license, by: lib.by, home: lib.home, contains: lib.contains || [], packages: [], files: {} };
   for (const pkg of lib.npm) {
     const files = await tarball(pkg);
     lock.packages.push({ name: pkg.name, version: pkg.version, integrity: pkg.integrity });
@@ -172,6 +172,7 @@ function writeRights(gameDir) {
     const lock = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
     rights.others.push({ what: `${lock.title} (${lock.packages.map((p) => p.name + '@' + p.version).join(', ')})` + (lock.joltMemoryMB ? `, its fixed memory set to ${lock.joltMemoryMB} MB` : ''),
       by: lock.by, license: lock.license, from: `vendor/${id}/ (npm, sha512-checked; licence in vendor/${id}/LICENSE.txt; home ${lock.home})` });
+    for (const c of lock.contains || []) rights.others.push({ what: c.what, by: c.by, license: c.license, from: `vendor/${id}/ (${c.home})` });
   }
   fs.writeFileSync(file, JSON.stringify(rights, null, 2) + '\n');
 }
