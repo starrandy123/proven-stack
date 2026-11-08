@@ -13,7 +13,8 @@ Every library is pinned to an exact release, checked against its sha512, and ven
 measures the running game and is proven to fail when its defect is planted.
 
 **Made with it:** *Painted Ronin* (`examples/painted-ronin/`), an original samurai open world in oil paint, built by Claude Code from
-this repo in one evening.
+this repo in one night. **Play it on NotesMosaic: https://notesmosaic.com/sim/9MV2-XeIEoAASJo2** (certified in Chromium and WebKit: 59-60 fps,
+71-86 MB on a phone).
 
 ## Combine it with the skills you already use
 

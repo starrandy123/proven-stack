@@ -3,7 +3,8 @@
 *Painted Ronin* is an original samurai open world in oil paint: a ronin, a valley of golden grass in the wind, red maples, a shrine on a
 hill, three bandit camps. It was built by Claude Code from this repo in one evening. Every system in it comes from a library or a
 method that shipped before; the game's own code is the glue, the rules and the look. Here is the order it was built in. Each step is
-small enough to see working before the next one starts. The painted look of everything (step 6) was added the next night.
+small enough to see working before the next one starts. The painted look of everything (step 6) was added later the same night.
+**Play it:** https://notesmosaic.com/sim/9MV2-XeIEoAASJo2
 
 ## 1. The land you can stand on (Jolt + FastNoiseLite)
 One height function (`world.js`) feeds three things: the terrain mesh, Jolt's `HeightFieldShape` and everything placed on the ground.
