@@ -196,7 +196,7 @@ function specialUpdate(dt) {
     }
     if (!sp.fell) {
       sp.fell = true; sp.to = pos.clone();
-      vfx.stroke(sp.from.clone().add(new THREE.Vector3(0, 1.05, 0)), sp.to.clone().add(new THREE.Vector3(0, 1.25, 0)), { width: 0.55, color: 'crimson', life: 1.7 });
+      vfx.stroke(sp.from.clone().add(new THREE.Vector3(0, 1.05, 0)), sp.to.clone().add(new THREE.Vector3(0, 1.25, 0)), { width: 1.3, color: 'crimson', life: 1.7 });
       sp.fallAt = sp.t + 0.32;                                               // a beat of silence, then they fall
     }
     if (sp.t >= sp.fallAt && sp.victims) {
@@ -212,7 +212,7 @@ function specialUpdate(dt) {
       const a0 = facing + sp.done * 2.1;
       for (let k = 0; k < 3; k++) {                                           // an ink ring, three strokes around him
         const a = a0 + k * 2.09, r = 2.6;
-        vfx.stroke(pos.clone().add(new THREE.Vector3(Math.sin(a) * r, 1.0 + k * 0.15, Math.cos(a) * r)), pos.clone().add(new THREE.Vector3(Math.sin(a + 1.9) * r, 1.1, Math.cos(a + 1.9) * r)), { width: 0.4, color: last ? 'crimson' : 'ink', life: 0.9 });
+        vfx.stroke(pos.clone().add(new THREE.Vector3(Math.sin(a) * r, 1.0 + k * 0.15, Math.cos(a) * r)), pos.clone().add(new THREE.Vector3(Math.sin(a + 1.9) * r, 1.1, Math.cos(a + 1.9) * r)), { width: 0.85, color: last ? 'crimson' : 'ink', life: 0.9 });
       }
       let n = 0;
       for (const b of bandits.alive()) {

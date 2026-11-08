@@ -133,12 +133,14 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
     trailGeo.attributes.position.needsUpdate = true; trailGeo.attributes.alpha.needsUpdate = true;
   }
 
-  // an ink stroke hung in the air: the atlas's kabura stroke (MyPaint's sumi brush, loaded start, split dry tail) laid on a quad from a to b
-  const inkTex = (() => { const t = atlas.clone(), r = rect('stroke_ink'); t.offset.set(r.x, r.y + r.w * 0.18); t.repeat.set(r.z, r.w * 0.64); t.needsUpdate = true; return t; })();
+  // an ink stroke hung in the air: the atlas's kabura stroke (MyPaint's sumi brush, loaded start, split dry tail) laid WHOLE on a quad from a
+  // to b, so its own outline shows; the bristles' value drives the ink's alpha (alphaMap reads G), so where the brush runs dry the ink thins,
+  // as sumi-e's dry brush does (a dark colour times a value shows no streaks; an alpha does)
+  const inkTex = (() => { const t = atlas.clone(), r = rect('stroke_ink'); t.offset.set(r.x, r.y); t.repeat.set(r.z, r.w); t.needsUpdate = true; return t; })();
   const strokes = [];
   function stroke(a, b, { width = 0.45, color = 'ink', life = 1.1, up = new THREE.Vector3(0, 1, 0) } = {}) {
     const dir = b.clone().sub(a), len = dir.length(); if (len < 0.1) return;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ map: inkTex, color: col(color), transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.9, fog: false }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ map: inkTex, alphaMap: inkTex, color: col(color), transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.95, fog: false }));
     m.userData.painted = 'stroke';
     m.position.copy(a).add(b).multiplyScalar(0.5); m.scale.x = 0.01;
     scene.add(m); strokes.push({ m, t: 0, life, dir: dir.normalize() });
