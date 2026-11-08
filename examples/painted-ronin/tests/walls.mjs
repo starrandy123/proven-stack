@@ -12,6 +12,18 @@
 //   W8 turns     — four bandits fight him 8 s: the attack budget is never overspent (≤ 10: two cuts, or a combo and a cut), never
 //                  more than two strike at once, and no two impacts land under 300 ms apart (Kingdoms of Amalur; Ghost of Tsushima).
 //                  The bound read is 0.29 s: impacts are stamped on rendered frames, and 10 ms is under one frame at 60 fps.
+//   W10 the lock — a bandit 7 m off to the ronin's side (110° from where he faces, outside the old 70° cone): one press of strike goes
+//                  to HIM and the blow lands (Arkham's Freeflow: a strike finds the enemy; God of War's targeting)        plant nolock
+//   W11 the leap — that strike crosses the 7 m in the AIR and like a samurai: the body 0.2-0.5 m over the ground (forward, not up:
+//                  "kendo is trying to move forward instead of upward"), ≤ 0.35 m slid along the ground before the impact, and at
+//                  mid-flight a STRIDE, not a tuck (the feet ≥ 0.6 m apart along the travel, one knee ≥ 150°); from 3.5 m the combo's
+//                  own cuts lunge off the ground too (the owner, 8 Nov: "sloppily sliding to them instead of jumping and attacking" ·
+//                  "It looks like a frog rather than a leap to the enemy!")                                       plants slide, frog
+//   W12 the press — the brush presses where the blade wounds: a cut that wounds is ≥ 1.6× as wide as a cut in the air, a cut that
+//                  kills ≥ 2.6× (and ≥ 1.3× a wound) and lingers ≥ 1.2 s; 閃's ink line swells ≥ 1.8× over a body it kills (sumi-e: light
+//                  pressure thin, heavy pressure bold; the owner, 8 Nov: "thicker as they injure their enemies … and show death") plant nopress
+//   W13 clear view — the follow camera never sits inside a camp's smoke column: with the ronin 1 m from a fire and the camera aimed
+//                  through it, the lens stays ≥ 2.5 m from the smoke's axis (Cinemachine's collider; the 8 Nov reveal went white)  plant camclip
 //   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee]   (a plant must turn its wall red: exit 1)
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -157,6 +169,83 @@ async function open(query, viewport = { width: 960, height: 540 }) {
     });
     const ok = r.every((x) => x && x.d <= 0.6);
     wall('W9 contact', ok && !errors.length, r.map((x) => x ? `${x.clip.replace('Sword_Regular_', '')}: blade ${x.d} m from his axis at ${x.h} m high` : 'no strike').join(' · '));
+    await page.close();
+  }
+
+  // W10 + W11: the lock and the leap. One bandit 7 m away at 110° from the ronin's facing (the others far off), one strike; then a bandit
+  // 3.5 m ahead and the combo's first cut (a lunge). Every rendered frame reads the strike's own record: its target, how high the body
+  // rose over the ground under it, how far it slid along the ground before the impact, and whether the blow landed.
+  {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      G.bandits.blockChance = 0; G.bandits.feintChance = 0;
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+      const put = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+      camp.forEach((b) => put(b, c.x - 9, c.y + 9));                       // the others out of the lock's 12 m
+      const T = G.THREE, pose = { stride: 0, knee: 0, taken: false };
+      const sample = () => { const R = G.ronin, P = (n) => R.bones[n].getWorldPosition(new T.Vector3()), f = new T.Vector3(Math.sin(R.root.rotation.y), 0, Math.cos(R.root.rotation.y));
+        const ang = (a, b, c) => { const u = a.clone().sub(b).normalize(), v = c.clone().sub(b).normalize(); return Math.acos(Math.max(-1, Math.min(1, u.dot(v)))) * 57.3; };
+        pose.stride = +Math.abs(P('foot_r').sub(P('foot_l')).dot(f)).toFixed(2); pose.knee = Math.round(Math.max(ang(P('thigh_r'), P('calf_r'), P('foot_r')), ang(P('thigh_l'), P('calf_l'), P('foot_l')))); pose.taken = true; };
+      const follow = (b) => new Promise((ok) => { const hp0 = b.hp; let rec = null; pose.taken = false; const tick = () => { const st = G.pc.strike;
+        if (st && st.air && st.air.kind === 'leap' && !st.air.landed && !pose.taken && (st.t - st.air.tau) / st.air.T >= 0.5) sample();   // mid-flight
+        if (st) rec = { target: st.target === b, lift: +st.lift.toFixed(2), slide: +st.groundSlide.toFixed(2), clip: st.def.clip, air: st.air ? st.air.kind : 'ground', stride: pose.stride, knee: pose.knee };
+        if (!st && rec) return ok({ ...rec, landed: b.hp < hp0 || b.dead }); if (rec && st && st.t > st.impact + 0.12) return ok({ ...rec, landed: b.hp < hp0 || b.dead }); requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
+      const out = {};
+      { const b = camp[0], p = G.ronin.root.position, a = 110 * Math.PI / 180; G.facing = 0; put(b, p.x + Math.sin(a) * 7, p.z + Math.cos(a) * 7); b.hp = 99; await wait(400);
+        G.facing = 0; G.pc.strike = null; G.strike(0); out.far = await follow(b); await wait(1200); put(b, c.x - 9, c.y + 9); }
+      { const b = camp[1], p = G.ronin.root.position; G.facing = Math.atan2(-1, 0); put(b, p.x - 3.5, p.z); b.hp = 99; await wait(400);
+        G.facing = Math.atan2(-1, 0); G.pc.strike = null; G.strike(0); out.near = await follow(b); }
+      return out;
+    });
+    const f = r.far || {}, n = r.near || {};
+    wall('W10 the lock', !!(f.target && f.landed) && !errors.length, `a bandit 7 m away at 110°: the strike ${f.target ? 'went to him' : 'did NOT go to him'}, the blow ${f.landed ? 'landed' : 'missed'}`);
+    wall('W11 the leap', !!(f.lift >= 0.2 && f.lift <= 0.5 && f.slide <= 0.35 && f.landed && f.stride >= 0.6 && f.knee >= 150 && n.lift >= 0.05 && n.slide <= 0.35), `from 7 m: ${f.air} (${f.clip}), up ${f.lift} m (0.2-0.5: forward, not up), slid ${f.slide} m (≤ 0.35), at mid-flight a stride of ${f.stride} m (≥ 0.6) with a knee at ${f.knee}° (≥ 150: not a tuck) · from 3.5 m: ${n.air} (${n.clip}), up ${n.lift} m (≥ 0.05), slid ${n.slide} m (≤ 0.35)`);
+    await page.close();
+  }
+
+  // W12: the press. Three cuts of the same clip from 2.2 m — in the air, into a bandit who lives, into one who dies — and 閃 through a
+  // bandit it kills; the crescent's widest band read off its own geometry, the ink line's drawn width off its mesh.
+  {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      G.bandits.blockChance = 0; G.bandits.feintChance = 0; G.pc.invuln = 99;
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+      const put = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+      const away = (b) => put(b, c.x - 9, c.y + 9); camp.forEach(away);
+      const widest = (arc) => { const a = arc.m.geometry.attributes.position; let mx = 0; for (let i = 0; i + 1 < a.count; i += 2) mx = Math.max(mx, Math.hypot(a.getX(i + 1) - a.getX(i), a.getY(i + 1) - a.getY(i), a.getZ(i + 1) - a.getZ(i))); return +mx.toFixed(3); };
+      const cut = async (b, hp) => {
+        const p = G.ronin.root.position; G.facing = Math.atan2(-1, 0);
+        if (b) { put(b, p.x - 2.2, p.z); b.hp = hp; }
+        await wait(350); G.facing = Math.atan2(-1, 0); G.pc.strike = null; G.strike(0); const arc = G.pc.strike.arc; await wait(900);
+        const out = { w: widest(arc), linger: arc.fadeT, dead: b ? b.dead : null }; if (b && !b.dead) away(b); return out;
+      };
+      const miss = await cut(null), wound = await cut(camp[0], 99), death = await cut(camp[1], 1);
+      // 閃 through a bandit it kills
+      const p = G.ronin.root.position, f = G.facing; put(camp[2], p.x + Math.sin(f) * 3, p.z + Math.cos(f) * 3); camp[2].hp = 1; await wait(350);
+      G.pc.strike = null; G.pc.ki = 100; G.dashSpecial(); const sp = G.pc.special; await wait(1100);
+      const dash = sp && sp.stroke ? { base: sp.stroke.m.geometry.parameters.height, drawn: +(sp.stroke.m.geometry.parameters.height * sp.stroke.m.scale.y).toFixed(3), dead: camp[2].dead } : null;
+      return { miss, wound, death, dash };
+    });
+    const { miss: m, wound: w, death: d, dash } = r, k = (a) => (a / Math.max(m.w, 1e-6)).toFixed(2);
+    const ok = !w.dead && !!d.dead && w.w >= 1.6 * m.w && d.w >= 2.6 * m.w && d.w >= 1.3 * w.w && d.linger >= 1.2 && dash && dash.dead && dash.drawn >= 1.8 * dash.base;
+    wall('W12 the press', ok && !errors.length, `${errors.length ? 'page errors: ' + errors.slice(0, 2).join(' | ') + ' · ' : ''}the wounded ${w.dead ? 'DIED' : 'lived'}, the killed ${d.dead ? 'died' : 'LIVED'}, 閃's ${dash && dash.dead ? 'died' : 'LIVED'} · a cut in the air ${m.w} m wide · into a wound ${w.w} m (${k(w.w)}×, ≥ 1.6) · into a death ${d.w} m (${k(d.w)}×, ≥ 2.6), lingering ${d.linger} s (≥ 1.2) · 閃's ink over a death ${dash ? dash.drawn + ' m from ' + dash.base + ' (≥ 1.8×)' : 'not drawn'}`);
+    await page.close();
+  }
+
+  // W13: the camera keeps clear of the smoke
+  {
+    const { page, errors } = await open('test');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms)); G.pc.invuln = 99;
+      const c = G.env.camps[0].center; G.player.setPosition(c.x + 1, G.land.groundY(c.x + 1, c.z) + 0.3, c.z); await wait(500);
+      G.cam.hold = false; G.cam.yaw = Math.atan2(-1, 0); G.cam.pitch = 0.2; G.cam.dist = 2.0; await wait(700);   // the camera's place: over the fire
+      const p = G.camera.position; return { d: Math.hypot(p.x - c.x, p.z - c.z) };
+    });
+    wall('W13 clear view', r.d >= 2.5 && !errors.length, `with the ronin 1 m from a fire and the camera aimed through it: the lens ${r.d.toFixed(2)} m from the smoke's axis (≥ 2.5)`);
     await page.close();
   }
 

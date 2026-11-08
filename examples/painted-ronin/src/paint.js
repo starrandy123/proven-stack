@@ -63,7 +63,7 @@ float paintTriplanar(vec3 p, vec3 n, float scale, vec4 r) {
 
 // the chain of shader patches one material carries (three.js has one onBeforeCompile per material): each patch is named, so a material
 // is patched once and its program is keyed by every patch it carries
-function addPatch(material, name, fn) {
+export function addPatch(material, name, fn) {
   material.userData.paint = material.userData.paint || [];
   if (material.userData.paint.some((p) => p.name === name)) return material;
   material.userData.paint.push({ name, fn });

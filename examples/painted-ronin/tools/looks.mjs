@@ -27,6 +27,12 @@ const SET = {
   valley: () => { const G = window.__GAME; G.cam.hold = false; G.cam.yaw = 2.9; G.cam.pitch = 0.02; G.cam.dist = 4.8; },
   // facing the sun: the camera sits on the far side of the ronin from it (sun azimuth 215°)
   sun: () => { const G = window.__GAME; G.cam.hold = false; G.cam.yaw = Math.atan2(-G.sunDir.x, -G.sunDir.z); G.cam.pitch = -0.12; G.cam.dist = 4.8; },
+  // a banner up close: the camp's first banner, the camera held a few metres off its cloth, square to it
+  banner: () => {
+    const G = window.__GAME, T = G.THREE, f = G.env.camps[0].group.userData.flags[0], w = new T.Vector3(); f.getWorldPosition(w);
+    const n = new T.Vector3(0, 0, 1).applyQuaternion(f.getWorldQuaternion(new T.Quaternion()));
+    G.cam.hold = true; G.cam.target.copy(w); G.cam.yaw = Math.atan2(n.x, n.z) + 0.35; G.cam.pitch = 0.12; G.cam.dist = 3.2;
+  },
   camp: () => {
     const G = window.__GAME, c = G.env.camps[0].center; G.cam.hold = false;
     G.player.setPosition(c.x + 9, G.land.groundY(c.x + 9, c.z) + 0.3, c.z + 3); G.cam.yaw = Math.atan2(9, 3); G.cam.pitch = 0.18; G.cam.dist = 6.5;

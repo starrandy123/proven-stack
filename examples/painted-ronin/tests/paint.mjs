@@ -18,6 +18,17 @@
 //   C3 lit side     facing away from the sun, the light band shows (≥ 15 % of a cloud) (Gurney 2007)             plant sunFlip
 //   C4 silver       backlit, a cloud's thin edge outshines its own sunlit face: the same cloud's backlit edge ÷ its
 //                   front-lit interior ≥ 1 (its own colour, before the sky) (Ghost of Tsushima: forward scattering)    plant rim0
+//   C5 the pace     clouds cross the sky at a fair day's pace, read as the eye reads it, in degrees a second: the painted deck
+//                   ≤ 0.35°/s seen from the valley (overhead cumulus 1-1.5 km up in a 5-10 m/s wind: 0.2-0.6°/s), Sky.js's high
+//                   sheet ≤ 0.2°/s (cirrus), each its clock as the RUNNING game feeds it (three.js's example: seconds)  plants skyms, lowclouds
+//   C6 the deck     one flat base for every cloud (AMS, cumulus humilis: "uniform flat bases"), ≥ 150 m clear of the land's highest
+//                   peak (no cloud hangs in the hills), and no two closer than their breadths (no two merged into one patch)
+//                                                                                                                  plants lowclouds, cloudclump
+//   L7 thin         a slash's crescent ≤ 0.22 m at its widest, the sword's ribbon ≤ 0.3 m, the specials' ink ≤ 0.36 m (the owner,
+//                   8 Nov: "The attack slashes are too wide in strokes and must be thinner")                      plant wideslash
+//   L9 banners     a banner is painted cloth, not a solid card: its free side frayed by the brush (≥ 1 % of its width off a smooth curve), a
+//                   crest brushed on it (≥ 2 % of it in ink), and it moves as cloth (its own picture changes ≥ 3 % in 0.6 s with
+//                   the pole held still) (nobori: dyed, hand-painted; Ghost of Tsushima's banners fly in the one wind)   plant solidflags
 //   The sky walls hold Sky.js's moving cloud sheet off; the cloud walls measure two clouds ?test anchors (one away from the sun, one
 //   toward it): a wall reads the same thing every run.
 //   node examples/painted-ronin/tests/paint.mjs [--engine chromium|webkit] [--plant <name>]
@@ -72,7 +83,8 @@ await page.evaluate(() => {
   const r = await page.evaluate(() => {
     const { G, T } = window.__P, atlas = G.paint.atlas, bad = [], seen = [];
     const uses = (name, ok) => { seen.push(name); if (!ok) bad.push(name); };
-    const patched = (m) => !!(m && m.userData.paint && m.userData.paint.some((p) => p.name.startsWith('surface:')));
+    // a patched body samples the atlas: paintSurface's 'surface:<region>' patch, or the banner's own cloth patch (env.js paintBanner)
+    const patched = (m) => !!(m && m.userData.paint && m.userData.paint.some((p) => p.name.startsWith('surface:') || p.name === 'banner'));
     uses('sky', G.sky.material.uniforms.paintAtlas && G.sky.material.uniforms.paintAtlas.value === atlas);
     uses('clouds', !!(G.clouds.mesh.material.uniforms.paintAtlas && G.clouds.mesh.material.uniforms.paintAtlas.value === atlas && G.clouds.mass && G.clouds.mass.material.uniforms.paintAtlas.value === atlas));
     uses('birds', G.birds.mesh.material.uniforms.paintAtlas.value === atlas);
@@ -247,6 +259,100 @@ async function cloudLook(sign, beyond = false) {
     const glow = b.edge / f.inner;
     wall('C4 silver lining', b.edgeN >= 50 && f.innerN >= 200 && glow >= 1.0, `the same cloud backlit: its edge ${glow.toFixed(2)}× its own sunlit face (≥ 1; ${b.edgeN} edge px backlit, ${f.innerN} face px front-lit)`);
   }
+}
+
+// ── C5: a fair day's pace — degrees a second, as the eye reads it ──
+{
+  const r = await page.evaluate(async () => {
+    const { G, T, render, lum } = window.__P, U = G.sky.material.uniforms;
+    // (1) the sheet's clock as the RUNNING game feeds it: how far Sky.js's time moves in a second of the page's own clock
+    const t0 = U.time.value, w0 = performance.now(); await new Promise((ok) => setTimeout(ok, 1000));
+    const rate = (U.time.value - t0) / ((performance.now() - w0) / 1000);
+    // (2) how far the sheet moves ON SCREEN per unit of that clock: the sheet alone (the painted clouds, the birds and the print's band
+    // off), looking 40° up downwind from the ronin; two pictures a known step of its clock apart; the shift that lays one on the other
+    const eye = G.ronin.root.position.clone(); eye.y += 2;
+    const Wd = new T.Vector3(G.WIND.x, 0, G.WIND.z).normalize(), el = 40 * Math.PI / 180;
+    const cam = window.__P.camAt(eye, eye.clone().add(new T.Vector3(Wd.x * Math.cos(el), Math.sin(el), Wd.z * Math.cos(el))));
+    const keep = { t: U.time.value, cov: U.cloudCoverage.value, bok: U.paintBokashi.value };
+    U.paintBokashi.value = 0; U.cloudCoverage.value = 0.6; G.clouds.mesh.visible = false;   // a fuller sheet to match (its pace is the same at any coverage: at the game's 0.3 this view can hold no cloud at all) G.birds.mesh.visible = false;
+    const small = (im) => { const W = 160, H = 90, o = new Float32Array(W * H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const sx = Math.floor((x + 0.5) * im.w / W), sy = Math.floor((y + 0.5) * im.h / H); o[y * W + x] = lum(im.px, sy * im.w + sx); } return o; };
+    const best = (A, B) => { let bd = Infinity, bx = 0, by = 0, d0 = 0; for (let dy = -30; dy <= 30; dy++) for (let dx = -30; dx <= 30; dx++) { let e = 0; for (let y = 32; y < 58; y++) for (let x = 35; x < 125; x++) { const q = A[y * 160 + x] - B[(y + dy) * 160 + x + dx]; e += q * q; } if (dx === 0 && dy === 0) d0 = e; if (e < bd) { bd = e; bx = dx; by = dy; } } return { px: Math.hypot(bx, by), resid: bd / Math.max(d0, 1e-12) }; };
+    let degPerUnit = null, used = null;
+    for (const step of [2, 20, 60, 200, 2000]) {
+      U.time.value = 50; const a = small(render(G.scene, cam)); U.time.value = 50 + step; const b = small(render(G.scene, cam));
+      const m = best(a, b); if (m.px >= 5 && m.resid < 0.6) { degPerUnit = m.px * (cam.fov / 90) / step; used = { step, ...m }; break; }
+    }
+    U.time.value = keep.t; U.cloudCoverage.value = keep.cov; U.paintBokashi.value = keep.bok; G.clouds.mesh.visible = true; G.birds.mesh.visible = true;
+    // (3) the painted deck: every cloud's direction from the ronin's eye, before and after one second of its drift (the anchored test
+    // clouds hold still and are not counted; a cloud that went round the deck's edge is not a move)
+    const moves = []; const dirs = G.clouds.clouds.filter((c) => !c.anchored).map((c) => [c, c.center.clone()]); G.clouds.update(1);
+    for (const [c, was] of dirs) { if (c.center.distanceTo(was) > 20) continue; const a = was.clone().sub(eye).normalize(), b = c.center.clone().sub(eye).normalize(); if (Math.asin(a.y) < 10 * Math.PI / 180) continue; moves.push(Math.acos(Math.min(1, a.dot(b))) * 180 / Math.PI); }
+    return { rate: +rate.toFixed(3), degPerUnit, used, sheet: degPerUnit === null ? null : rate * degPerUnit, deck: moves.length ? Math.max(...moves) : null, n: moves.length };
+  });
+  const sheetOk = r.sheet !== null && r.sheet <= 0.2, deckOk = r.deck !== null && r.deck <= 0.35;
+  wall('C5 the pace', sheetOk && deckOk, `the painted deck at most ${r.deck === null ? '—' : r.deck.toFixed(3)}°/s over ${r.n} clouds seen from the valley (≤ 0.35) · Sky.js's sheet ${r.sheet === null ? 'unmeasured' : r.sheet.toFixed(3)}°/s (≤ 0.2): its clock ${r.rate} a second × ${r.degPerUnit === null ? '—' : r.degPerUnit.toExponential(2)}° a unit${r.used ? ` (a ${r.used.px.toFixed(1)} px shift over ${r.used.step} units)` : ''}`);
+}
+
+// ── C6: the deck — one flat base, clear of the hills, no two clouds merged ──
+{
+  const r = await page.evaluate(() => {
+    const { G } = window.__P, cs = G.clouds.clouds.filter((c) => !c.anchored), bases = cs.map((c) => c.center.y - c.size * 0.32);
+    let peak = -Infinity; for (const h of G.land.heights) if (h > peak) peak = h;
+    let close = 0, worst = Infinity;
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) { const d = Math.hypot(cs[i].center.x - cs[j].center.x, cs[i].center.z - cs[j].center.z), need = 1.6 * (cs[i].size + cs[j].size); worst = Math.min(worst, d / need); if (d < need) close++; }
+    return { n: cs.length, spread: Math.max(...bases) - Math.min(...bases), base: Math.min(...bases), peak, close, worst };
+  });
+  wall('C6 the deck', r.n >= 8 && r.spread <= 1 && r.base - r.peak >= 150 && r.close === 0, `${r.n} clouds, their bases within ${r.spread.toFixed(1)} m of one another (≤ 1), the deck ${Math.round(r.base - r.peak)} m over the highest peak (${Math.round(r.peak)} m; ≥ 150), ${r.close} pairs closer than their breadths (0; the nearest pair ${r.worst.toFixed(2)}× theirs)`);
+}
+
+// ── L7: thin strokes — the crescent and the sword's ribbon on a cut, the ink of 閃 and 嵐 ──
+{
+  const r = await page.evaluate(async () => {
+    const { G } = window.__P, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+    const pairWidth = (attr) => { let mx = 0; for (let i = 0; i + 1 < attr.count; i += 2) mx = Math.max(mx, Math.hypot(attr.getX(i + 1) - attr.getX(i), attr.getY(i + 1) - attr.getY(i), attr.getZ(i + 1) - attr.getZ(i))); return mx; };
+    G.pc.invuln = 99; G.pc.strike = null; G.strike(0);
+    const arc = G.vfx.arcs.length ? pairWidth(G.vfx.arcs[G.vfx.arcs.length - 1].m.geometry.attributes.position) : null;
+    let ribbon = 0; const until = performance.now() + 900;
+    while (performance.now() < until) { await wait(16); ribbon = Math.max(ribbon, pairWidth(G.vfx.trail.geometry.attributes.position)); }
+    const ink = [], watch = async (ms) => { const end = performance.now() + ms; while (performance.now() < end) { await wait(40); for (const k of G.vfx.strokes) ink.push(k.m.geometry.parameters.height); } };
+    G.pc.strike = null; G.pc.ki = 100; G.dashSpecial(); await watch(900);
+    G.pc.special = null; G.pc.ki = 100; G.stormSpecial(); await watch(3000);
+    return { arc, ribbon, ink: ink.length ? Math.max(...ink) : null, inkN: ink.length };
+  });
+  wall('L7 thin', r.arc !== null && r.arc <= 0.22 && r.ribbon <= 0.3 && r.ink !== null && r.ink <= 0.36, `a cut's crescent ${r.arc === null ? '—' : r.arc.toFixed(2)} m at its widest (≤ 0.22), the sword's ribbon ${r.ribbon.toFixed(2)} m (≤ 0.3), the specials' ink ${r.ink === null ? '—' : r.ink.toFixed(2)} m over ${r.inkN} strokes (≤ 0.36)`);
+}
+
+// ── L9: the banners are painted cloth — the first camp's first banner alone, square to the camera, without the oil pass ──
+{
+  const r = await page.evaluate(() => {
+    const { G, T, render, lum } = window.__P, f = G.env.camps[0].group.userData.flags[0], c = new T.Vector3(); f.getWorldPosition(c);
+    const n = new T.Vector3(0, 0, 1).applyQuaternion(f.getWorldQuaternion(new T.Quaternion()));
+    const cam = window.__P.camAt(c.clone().addScaledVector(n, 3.2), c);
+    const hidden = []; G.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o !== f && o.visible) { o.visible = false; hidden.push(o); } });
+    const rot = f.rotation.y, shot = () => render(G.scene, cam);
+    const a = shot(); G.paint.time.value += 0.6; const b = shot(); G.paint.time.value -= 0.6; f.rotation.y = rot;
+    for (const o of hidden) o.visible = true;
+    const { w, h, px } = a, M = (im) => { const m = new Uint8Array(w * h); for (let i = 0; i < w * h; i++) m[i] = im.px[i * 4 + 3] > 0.5 ? 1 : 0; return m; };
+    // the cloth moved: the share of its pixels whose coverage or light changed (a wave turns the cloth, so its toon bands shift)
+    const ma = M(a), mb = M(b); let changed = 0, uni = 0, area = 0;
+    for (let i = 0; i < w * h; i++) { area += ma[i]; if (!(ma[i] | mb[i])) continue; uni++; if (ma[i] !== mb[i] || Math.abs(lum(a.px, i) - lum(b.px, i)) > 0.02 * Math.max(0.05, lum(a.px, i))) changed++; }
+    const morph = (m, r, dil) => { const o = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = dil ? 0 : 1; for (let dy = -r; dy <= r && (dil ? !v : v); dy++) for (let dx = -r; dx <= r; dx++) { const xx = x + dx, yy = y + dy, q = xx >= 0 && yy >= 0 && xx < w && yy < h ? m[yy * w + xx] : 0; if (dil && q) { v = 1; break; } if (!dil && !q) { v = 0; break; } } o[y * w + x] = v; } return o; };
+    const inner = morph(ma, 2, false), Ls = []; for (let i = 0; i < w * h; i++) if (inner[i]) Ls.push(lum(px, i));
+    const sorted = Ls.slice().sort((p, q) => p - q), med = sorted[Math.floor(sorted.length / 2)] || 0, ink = Ls.filter((v) => v < med * 0.45).length;
+    // the outline brushed, not cut: each side's edge x(y) against the smooth curve through it (a least-squares quadratic), RMS as a share
+    // of the banner's width. A cut card's sides are straight lines (≈ 0); a brushed side frays off its curve. The larger side counts.
+    let y0 = h, y1 = 0, x0 = w, x1 = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (ma[y * w + x]) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+    const fit = (pts) => { // y → x, a quadratic by normal equations
+      let S = [0, 0, 0, 0, 0], T = [0, 0, 0]; for (const [y, x] of pts) { const t = (y - y0) / Math.max(1, y1 - y0); let p = 1; for (let k = 0; k < 5; k++) { S[k] += p; if (k < 3) T[k] += x * p; p *= t; } }
+      const A = [[S[0], S[1], S[2]], [S[1], S[2], S[3]], [S[2], S[3], S[4]]], det = (M) => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+      const D = det(A), c = [0, 1, 2].map((i) => det(A.map((row, r) => row.map((v, k) => (k === i ? T[r] : v)))) / D);
+      let e = 0; for (const [y, x] of pts) { const t = (y - y0) / Math.max(1, y1 - y0); e += (x - (c[0] + c[1] * t + c[2] * t * t)) ** 2; } return Math.sqrt(e / Math.max(1, pts.length)); };
+    const L = [], Rr = []; for (let y = y0 + Math.round((y1 - y0) * 0.05); y <= y1 - Math.round((y1 - y0) * 0.05); y++) { let a = -1, b = -1; for (let x = x0; x <= x1; x++) if (ma[y * w + x]) { if (a < 0) a = x; b = x; } if (a >= 0) { L.push([y, a]); Rr.push([y, b]); } }
+    const edge = Math.max(fit(L), fit(Rr)) / Math.max(1, x1 - x0);
+    return { area, edge, crest: ink / Math.max(1, Ls.length), moved: changed / Math.max(1, uni) };
+  });
+  // the fray's bound sits between the two readings measured on 8 Nov: the painted cloth 1.9 % (both engines), the old card 0.0 %
+  wall('L9 banners', r.area > 2000 && r.edge >= 0.01 && r.crest >= 0.02 && r.moved >= 0.03, `a banner of ${r.area} px: its frayed side ${(r.edge * 100).toFixed(1)} % of its width off a smooth curve (≥ 1 %; the old card 0.0), ${(r.crest * 100).toFixed(1)} % of it a brushed crest in ink (≥ 2 %), its picture ${(r.moved * 100).toFixed(1)} % changed in 0.6 s with the pole still (≥ 3 %: cloth)`);
 }
 
 if (errors.length) wall('no page errors', false, errors.slice(0, 3).join(' | '));

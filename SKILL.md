@@ -74,7 +74,12 @@ Each module of the worked example names, in its header, the upstream example it 
   behind otherwise); attach props to bones in the bind pose.
 - **The fight:** measure each attack clip (where and when the blade crosses in front of the body) and aim the strike there, so the
   blade meets the body; an attack budget so enemies take turns (Kingdoms of Amalur's grid: never more than two at once); hit-stop of
-  0.06-0.11 s, trauma² screen shake, a wind-up the player can read before every enemy blow.
+  0.06-0.11 s, trauma² screen shake, a wind-up the player can read before every enemy blow. Every strike goes to ONE locked enemy
+  (Arkham's Freeflow: a strike finds the enemy you face, and the next one when it falls; God of War 2018: target from stick and view)
+  and reaches it with an AUTHORED DASH ATTACK: the clip's own stride and knee bend carry the body, its root motion warped onto the
+  target (Unreal's Motion Warping; Sekiro's Shadowrush, "a long-range rushing thrust"; Ninja Gaiden 4's Flying Swallow, a dash toward an
+  enemy). Never slide a body along the ground under an in-place clip, and never compose a jump from mismatched halves: both read as
+  sloppy at once (the owner, 8 Nov: "It looks like a frog" · "No front flip!" · "Just dash attack").
 - **Grass:** SimonDev's Quick_Grass (MIT), the method of Ghost of Tsushima's GDC 2021 talk.
 
 ## 3. A painted look is one language, not one filter
@@ -92,7 +97,16 @@ have a strong dislike of 'painterly post fx'"). Give every surface strokes BEFOR
   (Ghost of Tsushima put one global wind "into nearly every single effect").
 - **Clouds the Sea of Thieves way** (SIGGRAPH 2018 talk): opaque puffs drawn into a small buffer, blurred into one mass, then a painted
   edge, three tones (warm light, rose half tone, violet shadow) and a silver lining when the sun is behind them. Billboard puffs read as
-  "just meshes".
+  "just meshes". Lay them as ONE DECK: every base on one flat height well over the hills (cumulus humilis: "uniform flat bases", the AMS
+  glossary), no two closer than their breadths, so they recede in perspective instead of hanging in the hills as one patch. Their pace
+  is an ANGLE: a fair day's cumulus crosses ≤ ~0.3°/s seen from the ground.
+  ⚠ three.js `Sky.js`'s `time` uniform counts SECONDS (its example feeds `performance.now() * 0.001`); fed milliseconds its sheet runs
+  1,000× fast, and even its default `cloudSpeed` crosses a view 40° up at ~2.4°/s (1.2e-6 gives a cirrus's ~0.14°/s).
+- **Thin strokes for cuts, pressed where they wound:** a slash is a band along the blade TIP's path, tapered to points at both ends (a
+  crescent from hilt to tip is a metre wide and reads as a smear). Give it a brush's PRESSURE: lifted in the air, pressed where the blade
+  meets a body, pressed hard on a death (wider, crimson, lingering), as a calligrapher's stroke widens under pressure.
+- **Banners are dyed cloth, not cards:** strokes in the cloth's own UV (world strokes swim on a banner that swings), an outline cut by a
+  brush and frayed at its free side, a crest brushed on it, a wave in the one wind.
 - **A painted sky:** three.js's `Sky.js` with its luminance stepped into four soft tones, strokes anchored to the sky's own directions,
   a printed band across the top (the ukiyo-e bokashi); the fog walks to the sky's own horizon colour, measured off the sky (Firewatch).
 
@@ -100,8 +114,8 @@ have a strong dislike of 'painterly post fx'"). Give every surface strokes BEFOR
 
 Write each rule as a measurement of the running game in a real browser — never a screenshot judged by eye — with a `?plant=<defect>`
 seam that must turn it red. The worked example's `tests/walls.mjs` (ragdolls, pursuit, combat, specials, turn-taking, contact, phone
-memory) and `tests/paint.mjs` (one brush, three bands, one palette, the brush on a bird, one wind, the budget, the bokashi, the sky's
-tones and strokes, the clouds' tones, warmth, lit side and silver lining) are the model:
+memory, the lock, the approach) and `tests/paint.mjs` (one brush, three bands, one palette, the brush on a bird, one wind, the budget, the
+bokashi, the sky's tones and strokes, the clouds' tones, warmth, lit side, silver lining, pace and deck, thin strokes) are the model:
 
     node tools/check.mjs my-game                          # remote code, relative paths, rights.json, vendored bytes, boot in Chromium + WebKit, memory
     node my-game/tests/walls.mjs --engine chromium && node my-game/tests/walls.mjs --engine webkit

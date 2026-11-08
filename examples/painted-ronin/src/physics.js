@@ -116,13 +116,14 @@ export function createCharacter(P, { radius = 0.35, height = 1.1, maxSlopeDeg = 
     position(out) { const p = character.GetPosition(); return out.set(p.GetX(), p.GetY(), p.GetZ()); },
     onGround() { return character.GetGroundState() === Jolt.EGroundState_OnGround; },
     // the example's handleInput + prePhysicsUpdate, for a character whose up is always +Y
-    step(dt, vx, vz, jump) {
+    // launch: an upward speed to add when on the ground (a leaping special); gScale: gravity's multiple for that leap (Pittman's jump)
+    step(dt, vx, vz, jump, launch = 0, gScale = 1) {
       moving = Math.hypot(vx, vz) > 1e-6;
       character.UpdateGroundVelocity();
       const onGround = character.GetGroundState() === Jolt.EGroundState_OnGround && !character.IsSlopeTooSteep(character.GetGroundNormal());
       const gv = character.GetGroundVelocity();
-      if (onGround && vy <= 0.1) { vy = gv.GetY(); if (jump) vy += 6.2; }
-      vy += g * dt;
+      if (onGround && vy <= 0.1) { vy = gv.GetY(); if (jump) vy += 6.2; if (launch) vy += launch; }
+      vy += g * gScale * dt;
       tmp.Set(vx, vy, vz); character.SetLinearVelocity(tmp);
       character.ExtendedUpdate(dt, character.GetUp(), upd, bpf, olf, bf, sf, jolt.GetTempAllocator());
       const lv = character.GetLinearVelocity(); vy = lv.GetY();

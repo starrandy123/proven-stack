@@ -34,6 +34,9 @@ for (let i = 0; i < 2000; i++) {
   const ok = await page.evaluate(() => { window.__step(1000 / 60); return !!(window.__MOSA_BOOT && window.__MOSA_BOOT.ok); });
   if (ok) break; if (i % 50 === 49) await page.waitForTimeout(50);
 }
+// the page's own loading screen fades on the browser's real clock (a CSS transition, not the held one): wait until it is gone, so no
+// frame of the film shows it (8 Nov: the first frames of every clip still carried the fading title)
+await page.waitForFunction(() => { const l = document.getElementById('loading'); if (!l) return true; const cs = getComputedStyle(l); return cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0; }, null, { timeout: 15000 }).catch(() => {});
 await page.evaluate(shot);
 for (let i = 0; i < 30; i++) await page.evaluate(() => window.__step(1000 / 60));            // settle a half second
 const frames = fs.mkdtempSync(path.join(os.tmpdir(), 'film-'));

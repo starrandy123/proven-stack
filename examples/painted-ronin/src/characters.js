@@ -146,10 +146,11 @@ export class Person {
     return this.actions[name];
   }
   // a looping clip (idle, walk, run) blended by speed; a one-shot clip (a strike, a roll, a hit) plays over it and returns
-  play(name, { loop = true, fade = 0.18, speed = 1, onEnd = null } = {}) {
+  play(name, { loop = true, fade = 0.18, speed = 1, onEnd = null, at = 0 } = {}) {
     const next = this.action(name);
-    if (this.current === next && loop) return next;
-    next.reset(); next.enabled = true; next.setEffectiveTimeScale(speed); next.setEffectiveWeight(1);
+    if (this.current === next && loop && !this.split) return next;
+    if (this.split) { this.split.fadeOut(fade); this.split = null; }       // a leap's legs hand the body back
+    next.reset(); next.enabled = true; next.setEffectiveTimeScale(speed); next.setEffectiveWeight(1); next.time = at;
     next.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1); next.clampWhenFinished = !loop;
     if (this.current && this.current !== next) next.crossFadeFrom(this.current, fade, false); else next.fadeIn(fade);
     next.play();
@@ -159,6 +160,27 @@ export class Person {
       this.mixer.addEventListener('finished', done);
     }
     return next;
+  }
+  // a body in two halves, each from its own clip (three.js's AnimationMixer composes actions whose tracks name different bones): the
+  // legs and hips from `lower`, the spine, the arms and the head from `upper`. A leaping strike: a lunge's stride, the cut's arms.
+  half(name, part) {
+    const key = name + (part === 'lower' ? '|legs' : '|arms');
+    if (!this.clips[key]) {
+      const legs = (t) => /^(pelvis|thigh_|calf_|foot_|ball_)/.test(t.name);
+      const c = this.clips[name]; if (!c) throw new Error('no clip ' + name);
+      this.clips[key] = new THREE.AnimationClip(key, c.duration, c.tracks.filter((t) => (part === 'lower' ? legs(t) : !legs(t))));
+    }
+    return key;
+  }
+  playSplit(upper, lower, { upperSpeed = 1, lowerSpeed = 1, lowerAt = 0, fade = 0.08 } = {}) {
+    const u = this.action(this.half(upper, 'upper')), l = this.action(this.half(lower, 'lower'));
+    for (const [a, sp] of [[u, upperSpeed], [l, lowerSpeed]]) { a.reset(); a.enabled = true; a.setEffectiveTimeScale(sp); a.setEffectiveWeight(1); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+    l.time = lowerAt;                                                     // a pose held from inside its clip (a lunge's stride)
+    if (this.split) this.split.fadeOut(fade);
+    if (this.current) this.current.fadeOut(fade);
+    u.fadeIn(fade).play(); l.fadeIn(fade).play();
+    this.current = u; this.split = l; this.oneShot = upper;
+    return u;
   }
   // idle / walk / jog / sprint by the speed the body actually moves
   move(speed) {

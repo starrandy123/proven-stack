@@ -121,7 +121,8 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
   const trail = new THREE.Mesh(trailGeo, trailMat); trail.frustumCulled = false; scene.add(trail);
   const hist = []; const b = new THREE.Vector3(), t = new THREE.Vector3();
   function trailUpdate(sword, active) {
-    if (active) { sword.userData.base.getWorldPosition(b); sword.userData.tip.getWorldPosition(t); hist.unshift([b.clone(), t.clone()]); }
+    // the ribbon follows the blade's last fifth, not its whole length (thin, as the crescent is; plant wideslash: the whole blade)
+    if (active) { sword.userData.base.getWorldPosition(b); sword.userData.tip.getWorldPosition(t); hist.unshift([plant === 'wideslash' ? b.clone() : b.clone().lerp(t, 0.8), t.clone()]); }
     else hist.unshift(null);
     hist.length = Math.min(hist.length, N);
     for (let i = 0; i < N; i++) {
@@ -143,7 +144,33 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ map: inkTex, alphaMap: inkTex, color: col(color), transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.95, fog: false }));
     m.userData.painted = 'stroke';
     m.position.copy(a).add(b).multiplyScalar(0.5); m.scale.x = 0.01;
-    scene.add(m); strokes.push({ m, t: 0, life, dir: dir.normalize() });
+    const rec = { m, t: 0, life, dir: dir.normalize(), press: 1 };
+    scene.add(m); strokes.push(rec); return rec;
+  }
+  // an ink stroke that wounds swells (the brush pressed), one that kills swells more and lingers (plant nopress)
+  function pressStroke(rec, level) {
+    if (!rec || plant === 'nopress') return;
+    rec.press = Math.max(rec.press, level >= 2 ? 2.2 : 1.5); if (level >= 2) rec.life = Math.max(rec.life, rec.t + 1.6);
+  }
+  // THE LOCK'S MARK: an ensō brushed on the ground under the bandit the ronin is fighting (lock.js) — the one atlas's sumi stroke laid
+  // round a circle it does not close (the ensō's open stroke), the brush lifting as it goes round; crimson, fading in as the lock takes him
+  const enso = (() => {
+    const S = 48, r0 = 0.8, w = 0.2, open = 0.86, vp = [], uv = [], idx = [];
+    for (let j = 0; j <= S; j++) {
+      const u = j / S, a = u * Math.PI * 2 * open, ww = w * (1 - 0.6 * u);
+      vp.push(Math.sin(a) * (r0 - ww / 2), 0, Math.cos(a) * (r0 - ww / 2), Math.sin(a) * (r0 + ww / 2), 0, Math.cos(a) * (r0 + ww / 2)); uv.push(u, 0, u, 1);
+      if (j < S) { const q = j * 2; idx.push(q, q + 1, q + 2, q + 2, q + 1, q + 3); }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vp, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: inkTex, alphaMap: inkTex, color: col('crimson'), transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    m.name = 'lock-enso'; m.userData.painted = 'stroke'; m.renderOrder = 4; m.visible = false; m.frustumCulled = false; scene.add(m); return m;
+  })();
+  let ensoOn = null, ensoA = 0;
+  function lockMark(target, dt) {
+    if (target !== ensoOn) { ensoOn = target; ensoA = 0; }
+    ensoA = target ? Math.min(1, ensoA + dt / 0.18) : 0;
+    enso.visible = !!target && ensoA > 0;
+    if (target) { enso.position.copy(target.root.position); enso.position.y += 0.06; enso.material.opacity = ensoA; }
   }
   const _z = new THREE.Vector3(), _y = new THREE.Vector3(), _mm = new THREE.Matrix4();
   function strokeUpdate(dt, camera) {
@@ -154,6 +181,7 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
         _y.crossVectors(_z, s.dir); s.m.quaternion.setFromRotationMatrix(_mm.makeBasis(s.dir, _y, _z));
       }
       s.m.scale.x = Math.min(1, s.t / 0.08);                                 // the brush is drawn in 80 ms, then the ink fades
+      s.m.scale.y += (s.press - s.m.scale.y) * Math.min(1, dt / 0.08);       // pressed: it swells across its width
       s.m.material.opacity = 0.95 * (1 - Math.max(0, (k - 0.35) / 0.65));
       if (k >= 1) { scene.remove(s.m); s.m.geometry.dispose(); s.m.material.dispose(); strokes.splice(i, 1); }
     }
@@ -166,10 +194,10 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
   // that thins to a flick, flecks thrown off its tail. Painted once on a canvas; laid on a crescent shaped from the blade's real path
   // around the CONTACT (assets/clipdata.json), so the stroke passes through the body it cuts.
   const arcs = [], arcMat = (heavy) => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    uniforms: { ...atlasUniforms(), progress: { value: 0 }, fade: { value: 1 }, strokeRect: { value: rect(heavy ? 'stroke_ink' : 'stroke_cut') }, heavy: { value: heavy ? 1 : 0 },
+    uniforms: { ...atlasUniforms(), progress: { value: 0 }, fade: { value: 1 }, strokeRect: { value: rect(heavy ? 'stroke_ink' : 'stroke_cut') }, heavy: { value: heavy ? 1 : 0 }, death: { value: 0 },
       paperC: { value: col('paper') }, crimsonC: { value: col('crimson') }, inkC: { value: col('ink') } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform float progress; uniform float fade; uniform vec4 strokeRect; uniform float heavy; uniform vec3 paperC; uniform vec3 crimsonC; uniform vec3 inkC; varying vec2 vUv;
+    fragmentShader: `uniform float progress; uniform float fade; uniform vec4 strokeRect; uniform float heavy; uniform float death; uniform vec3 paperC; uniform vec3 crimsonC; uniform vec3 inkC; varying vec2 vUv;
       ${PAINT_GLSL}
       void main(){
         float drawn = smoothstep(progress, progress - 0.12, vUv.x);                // laid down as the blade passes
@@ -177,6 +205,7 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
         if (p.a < 0.04) discard;
         vec3 col = heavy > 0.5 ? mix(inkC, crimsonC, smoothstep(0.25, 0.75, vUv.y)) : mix(crimsonC, paperC, smoothstep(0.35, 0.8, vUv.y));
         col *= 0.8 + 0.55 * (p.r - 0.62) + 0.2;                                     // the bristles' own light and dark
+        col = mix(col, mix(inkC, crimsonC, 0.8 + 0.2 * vUv.y), death * 0.75);       // a death: the stroke loaded with crimson ink
         float a = drawn * p.a * fade;
         if (a < 0.03) discard;
         gl_FragColor = vec4(col, min(1.0, a * 1.15));
@@ -187,17 +216,38 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
     const j0 = Math.max(0, cf - 10), j1 = Math.min(d.tip.length - 1, cf + 6), n = j1 - j0 + 1;
     if (n < 3) return;
     const pos = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx = [];
-    for (let j = 0; j < n; j++) {
-      const b = d.base[j0 + j], t = d.tip[j0 + j];
-      const inner = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * 0.25), outer = [0, 1, 2].map((k) => b[k] + (t[k] - b[k]) * (heavy ? 1.55 : 1.35));
-      pos.set(inner, j * 6); pos.set(outer, j * 6 + 3); uv.set([j / (n - 1), 0, j / (n - 1), 1], j * 4);
-      if (j < n - 1) { const a = j * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
-    }
+    for (let j = 0; j < n; j++) { uv.set([j / (n - 1), 0, j / (n - 1), 1], j * 4); if (j < n - 1) { const a = j * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); } }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
     const m = new THREE.Mesh(g, arcMat(heavy)); m.frustumCulled = false; m.renderOrder = 5;
     // carried by the ronin while the blade swings (he may still be closing in), then left in the world where it was painted
     person.root.add(m);
-    arcs.push({ m, t: 0, start: j0 / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.45, detached: false });
+    const arc = { m, t: 0, start: j0 / 60 / speed, swing: (j1 - j0) / 60 / speed, fadeT: 0.45, detached: false, src: { d, j0, n, heavy }, cutAt: cf - j0, press: 1 };
+    shapeArc(arc); arcs.push(arc);
+    return arc;
+  }
+  // THE BRUSH'S PRESSURE. THIN (the owner, 8 Nov: "The attack slashes are too wide in strokes and must be thinner"): a band along the
+  // TIP's path, a fifth of the blade at its belly, drawn to a point at both ends (Aguiar's crescent) — it was the whole sweep from near
+  // the hilt to past the tip, about a metre wide (plant wideslash). And THICKER WHERE IT WOUNDS (the owner, 8 Nov: "the slashes to get
+  // thicker as they injure their enemies to make cooler paint stroke effect and show death"): a calligrapher's stroke widens as the brush
+  // is pressed and thins as it lifts (the soft bristles "let stroke width vary as the writer applies pressure"; sumi-e: "light pressure
+  // for thin lines and heavy pressure for bold strokes"). A swing that meets no one is the brush in the air; where the blade meets a body
+  // the brush presses (×2), and on a death it presses down hard (×3.6), turns to crimson ink and lingers (plant nopress).
+  function shapeArc(a) {
+    const { d, j0, n, heavy } = a.src, pos = a.m.geometry.attributes.position.array;
+    for (let j = 0; j < n; j++) {
+      const b = d.base[j0 + j], t = d.tip[j0 + j];
+      const taper = Math.pow(Math.sin(Math.PI * (j + 0.5) / n), 0.6), o = heavy ? 1.12 : 1.08;
+      const into = THREE.MathUtils.smoothstep(j, a.cutAt - 3, a.cutAt);           // pressed from where the blade meets the body
+      const band = (heavy ? 0.22 : 0.18) * taper * (1 + (a.press - 1) * into);
+      const [fi, fo] = plant === 'wideslash' ? [0.25, heavy ? 1.55 : 1.35] : [o - band * 0.6, o + band * 0.4];
+      for (let k = 0; k < 3; k++) { pos[j * 6 + k] = b[k] + (t[k] - b[k]) * fi; pos[j * 6 + 3 + k] = b[k] + (t[k] - b[k]) * fo; }
+    }
+    a.m.geometry.attributes.position.needsUpdate = true;
+  }
+  function pressArc(a, level) {                                       // level 1: a wound · level 2: a death
+    if (!a || plant === 'nopress') return;
+    a.press = Math.max(a.press, level >= 2 ? 3.6 : 2); shapeArc(a);
+    if (level >= 2) { a.fadeT = 1.4; a.m.material.uniforms.death.value = 1; }
   }
   function arcUpdate(dt) {
     for (let i = arcs.length - 1; i >= 0; i--) {
@@ -210,7 +260,7 @@ export function createVfx(scene, { phone = false, plant = null } = {}) {
   }
 
   const api = {
-    batch, hit, fire, trailUpdate, stroke, strokeUpdate, slashArc, arcUpdate, clipdata: null, leaves, smokes, pools, strokes, arcs, trail,
+    batch, hit, fire, trailUpdate, stroke, strokeUpdate, slashArc, arcUpdate, pressArc, pressStroke, lockMark, enso, clipdata: null, leaves, smokes, pools, strokes, arcs, trail,
     update(dt, playerPos) { leaves.emitter.position.set(playerPos.x, playerPos.y + 10, playerPos.z); batch.update(dt); arcUpdate(dt); },
   };
   return api;

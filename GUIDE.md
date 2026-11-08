@@ -61,8 +61,10 @@ was the clue.
 ## 5. The fight and the specials
 - **Combat:** a three-strike combo (the third is heavy), hit-stop of 0.07-0.11 s, trauma² screen shake, a roll with invulnerability
   frames, and a parry when blades meet.
+- **The lock:** every strike goes to one locked bandit (an ensō under him), up to 12 m away (§7). How the ronin closes the distance is
+  being rebuilt as an authored dash attack, his word of 8 Nov (§7).
 - **Ki:** fills from hits, kills and parries.
-  - 閃: a dash that cuts a line. The bandits fall a beat after the blade passes, and an ink stroke hangs in the air.
+  - 閃: a leaping dash that cuts a line. The bandits fall a beat after the blade passes, and a thin ink stroke hangs in the air.
   - 嵐: three beats of cuts all around.
 - **The air:** three.quarks carries the falling leaves, sparks, red ink and fires.
 - **Sound:** ZzFX, plus a Karplus-Strong koto.
@@ -102,7 +104,54 @@ strong dislike of 'painterly post fx'"*. So everything painted now speaks one la
   - two walls read whichever random cloud was in view.
   They now measure fine detail, the cloud's own colour, and two clouds placed for the test.
 
-## 7. The walls (`examples/painted-ronin/tests/walls.mjs`, `tests/paint.mjs`)
+## 7. His notes on the film (8 Nov), and what each became
+He watched the reveal and wrote four notes. Each became a measured rule with its plant:
+- **"The clouds are moving way! Too fast! It's supposed to be going slow like a normal day!"** Two causes, both measured:
+  - `skyPaint.update(time * 1000)` fed Sky.js milliseconds. Its clock counts **seconds**: three.js's own example feeds it
+    `performance.now() * 0.001`. Its cloud sheet drifted and churned 1,000× too fast.
+  - On seconds, three.js's default sheet speed still read 2.4°/s across a view 40° up. Cirrus crosses about 0.2°/s, so the sheet is
+    slowed to 0.14°/s.
+  - The rule is the pace the eye reads, in degrees a second: overhead fair-weather cumulus, 1-1.5 km up in a 5-10 m/s wind, cross
+    0.2-0.6°/s.
+- **"We have one big patch of clouds too that don't make sense."** The painted clouds sat 70-150 m up, on a ring that ran through the
+  mountains (peaks ~72 m), so a cloud could hang in the hills.
+  - They are now one deck: fair-weather cumulus have "uniform flat bases" (the AMS glossary, cumulus humilis), every base 320 m up,
+    248 m over the highest peak.
+  - They are spread over 2 km, and no two sit closer than their breadths, so they recede in perspective instead of merging.
+- **"hitting mostly nothing and not locking on to my enemy"**: strikes looked for a bandit in a 70° cone within 6 m. Now there is **one
+  lock**, as in Arkham's Freeflow (a strike "will leap across the screen and find the nearest enemy that he is facing"; the next foe
+  when one falls) and God of War 2018 (target from stick and view; the attacks face it). An ensō is brushed under the locked bandit.
+- **"sloppily sliding to them instead of jumping and attacking"**: the warp slid the body along the ground at up to 12 m/s. Every
+  approach is now in the air:
+  - **fumikomi**: kendo's lunging step, the cut's own clip carried in a low arc.
+  - **the approach, three tries and his verdicts:** a composed jump with tucked legs ("It looks like a frog rather than a leap to the
+    enemy!"); a low lunge-stride leap with the front leg locked straight ("The front leg knee needs to bend … Did you use any reference
+    clips at all"); then his word: "No front flip!" · "Just dash attack" · "We don't want the guy to roll, just dash to the opponent
+    with the leg bend". The lesson: start from shipped moves and authored clips, never compose a move from guesses. The next build uses
+    Quaternius's authored CC0 `Sword_Dash` (its front knee bends to 55-77° as it drives in), its root motion warped onto the target,
+    after Sekiro's Shadowrush and Ninja Gaiden 4's Flying Swallow.
+  - 閃 jumps through its line.
+- **"The attack slashes are too wide in strokes and must be thinner"**: the crescent ran from near the hilt to past the tip, about a
+  metre wide.
+  - It is now a band along the tip's path, a fifth of the blade at its widest, drawn to a point at both ends.
+  - The sword's ribbon follows the blade's last fifth.
+  - The specials' ink is 0.34 m (was 1.3).
+- **"We also want the slashes to get thicker as they injure their enemies to make cooler paint stroke effect and show death."** A
+  calligrapher's stroke widens as the brush is pressed and thins as it lifts ("light pressure for thin lines and heavy pressure for
+  bold strokes"). So the crescent carries a pressure:
+  - in the air the brush is lifted (0.13 m);
+  - where the blade meets a body it presses (×2, 0.26 m);
+  - on a death it presses hard (×3.5, 0.46 m), turns to crimson ink and lingers 1.4 s;
+  - 閃's and 嵐's ink lines swell the same way over the bodies they cut (×1.5 a wound, ×2.2 a death).
+- **"The red flags don't look like they've been painted either and look too solid."** Their strokes were laid in the world, so they
+  swam over a banner that swings, which broke our own rule that strokes belong to the object. A nobori is a long dyed cloth, painted by
+  hand with a crest, and Ghost of Tsushima flies its banners as cloth in the one wind (Rockenbeck, GDC 2021). Now each banner has:
+  - the oil field in the cloth's own space, broad enough to outlive the oil pass, darker where the dye pooled;
+  - an outline from the sumi stroke, frayed into streaks on the free side and at the foot;
+  - an ensō crest brushed with the same stroke;
+  - a wave that runs downwind from the pole.
+
+## 8. The walls (`examples/painted-ronin/tests/walls.mjs`, `tests/paint.mjs`)
 Each wall is a measurement of the running game, in Chromium and in WebKit, proven red by a planted defect:
 
 | Wall | Holds | Planted defect → red |
@@ -114,6 +163,9 @@ Each wall is a measurement of the running game, in Chromium and in WebKit, prove
 | W6 / W7 specials | the dash fells both bandits in its line; the storm fells both around him | `specials`: no damage |
 | W8 turns | four bandits never overspend the attack budget (≤ 10), never more than two strike at once, impacts ≥ 0.29 s apart | `budget`: peak 20/10, four at once |
 | W9 contact | at each strike's contact the real sword (off the skeleton) passes within 0.6 m of the bandit's axis | `reach`: 0.8-0.9 m off |
+| W10 the lock | a bandit 7 m away at 110° from the ronin's facing: one strike goes to him and lands | `nolock`: the old 70° cone, a miss |
+| W11 the approach | from 7 m the strike reaches him without sliding on the ground (≤ 0.35 m); being rewritten for the dash attack (his word of 8 Nov) | `slide`: 2.6 m slid on the ground, and a miss · `frog`: the tucked jump |
+| W12 the press | a cut that wounds ≥ 1.6× a cut in the air, one that kills ≥ 2.6× and lingers ≥ 1.2 s; 閃's ink ≥ 1.8× over a death | `nopress`: all 0.133 m |
 
 The painted language has its own walls (`tests/paint.mjs`), measured on the materials the game builds and the pixels it draws:
 
@@ -129,6 +181,10 @@ The painted language has its own walls (`tests/paint.mjs`), measured on the mate
 | S2 four tones | the sky's light sits on 3-5 tones | `skyramp`: the smooth ramp back |
 | S3 strokes | the sky carries strokes (fine detail) laid flat | `strokes0`, `strokes90` |
 | C1-C4 clouds | three tones on the swatches' hues; the shadow cooler than the light; the lit side shows away from the sun; the edge glows toward it | `rampLinear`, `rampGrey`, `sunFlip`, `rim0` |
+| C5 the pace | the painted deck ≤ 0.35°/s seen from the valley; Sky.js's sheet ≤ 0.2°/s, on the clock the running game feeds it | `skyms`: 138°/s · `lowclouds`: 0.57°/s |
+| C6 the deck | one flat base, ≥ 150 m over the highest peak, no two clouds closer than their breadths | `lowclouds`: −14 m · `cloudclump`: 41 pairs |
+| L7 thin | a cut's crescent ≤ 0.22 m, the sword's ribbon ≤ 0.3 m, the specials' ink ≤ 0.36 m | `wideslash`: 0.81 / 0.74 / 1.30 m |
+| L9 banners | a banner's free side frayed ≥ 1 % of its width off a smooth curve, ≥ 2 % of it a brushed ink crest, its picture changing as cloth | `solidflags`: 0.0 / 0.0 / 0.0 |
 
 ## Make yours
 Start from the recipes, not from this game. Tell your agent what you want (a game, its feel, its look) and point it at this repo.

@@ -9,7 +9,7 @@
 //  3. THE BOKASHI: a Prussian-blue band printed across the top of the picture with an uneven edge (ichimonji-mura bokashi), then a
 //     lighter band, then nothing — JAANUS: "a dark band, a light band, and a band fading into nothing"; Fletcher (1916): "printed with a
 //     soft edge". It belongs to the print, so it rides the screen, and it is switched off when the sky is measured.
-// Sky.js's own cloud sheet is kept as the high thin layer, its clock running (main.js never ran it), and it is banded with the rest.
+// Sky.js's own cloud sheet is kept as the high thin layer, its clock running in seconds at a cirrus's pace, banded with the rest.
 import * as THREE from 'three';
 import { PAINT_GLSL, atlasUniforms, rect, col } from './paint.js';
 
@@ -22,6 +22,9 @@ export function paintSky(sky, { plant = null } = {}) {
     paintStrokeTurn: { value: plant === 'strokes90' ? 1 : 0 },
   });
   U.cloudCoverage.value = 0.3;
+  // the high sheet at a cirrus's pace: three.js's default (2e-5 a second) carried it 2.4°/s across the view 40° up (measured, wall C5);
+  // cirrus 8-12 km up in a 30 m/s wind crosses ~0.2°/s overhead, less lower down. 1.2e-6 reads ~0.14°/s.
+  U.cloudSpeed.value = 1.2e-6;
   let fs = sky.material.fragmentShader;
   const at = 'uniform float time;', last = 'gl_FragColor = vec4( texColor, 1.0 );';
   if (!fs.includes(at) || !fs.includes(last)) throw new Error('Sky.js changed: the painted layer has nowhere to go');
@@ -54,6 +57,6 @@ export function paintSky(sky, { plant = null } = {}) {
   sky.material.fragmentShader = fs; sky.material.needsUpdate = true;
   return {
     setResolution(w, h) { U.paintRes.value.set(w, h); },
-    update(t) { U.time.value = t; },
+    update(seconds) { U.time.value = seconds; },                       // SECONDS, as three.js's own example feeds it
   };
 }

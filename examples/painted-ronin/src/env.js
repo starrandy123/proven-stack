@@ -4,7 +4,58 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addStaticCylinder, addStaticBox } from './physics.js';
-import { RAMP, col, paintSurface, WIND } from './paint.js';
+import { RAMP, col, paintSurface, WIND, addPatch, atlasUniforms, rect, PAINT_GLSL, paint } from './paint.js';
+
+// THE BANNERS ARE PAINTED CLOTH (the owner, 8 Nov: "The red flags don't look like they've been painted either and look too solid").
+// A nobori is a long dyed cloth on a pole, painted by hand with a crest or calligraphy (dealers' records of Meiji nobori: hand-spun
+// cotton, natural dyes and pigment, a family kamon); Ghost of Tsushima flies its banners as cloth in the same wind as its grass (Bill
+// Rockenbeck, GDC 2021, "Blowing from the West"). On the toon body, which keeps the three bands:
+//  · THE DYE: the one atlas's oil field laid in the cloth's OWN uv, so it moves with the cloth. The old strokes were laid in the world
+//    and swam over a banner that swings: "strokes belong to the object", broken.
+//  · THE EDGE: the atlas's sumi stroke (MyPaint's kabura brush) laid down the banner's length cuts its outline, its split dry tail the
+//    frayed foot: a brushed strip of dye, never a cut rectangle.
+//  · THE CREST: an ensō brushed with the same stroke (the lock's own mark): ink on the crimson cloth, crimson on the ink one.
+//  · THE CLOTH: a wave that runs downwind from the pole, nothing at the pole and most at the free edge. Plant solidflags: the old flag.
+function paintBanner(material, { crest, wave }) {
+  const U = { bannerField: { value: rect('field_b') }, bannerEdge: { value: rect('stroke_ink') },  bannerCrest: { value: col(crest) }, bannerWave: { value: wave }, bannerTime: paint.time };
+  material.userData.paintRegion = 'field_b';
+  return addPatch(material, 'banner', (shader) => {
+    Object.assign(shader.uniforms, atlasUniforms(), U);
+    const WAVE = 'float ph = bannerUv.x * 4.2 - bannerTime * 3.4 + bannerWave;';
+    shader.vertexShader = 'attribute vec2 bannerUv; uniform float bannerTime; uniform float bannerWave; varying vec2 vBannerUv;\n' + shader.vertexShader
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        { ${WAVE} float dzdx = (cos(ph) * 4.2 * 0.08 * bannerUv.x + sin(ph) * 0.08) / 0.7; objectNormal = normalize(vec3(-dzdx, 0.0, 1.0)); }`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vBannerUv = bannerUv;
+        { ${WAVE} transformed.z += sin(ph) * 0.08 * bannerUv.x + sin(bannerUv.y * 3.1 + bannerTime * 2.3 + bannerWave) * 0.025 * bannerUv.x; }`);
+    shader.fragmentShader = 'uniform vec4 bannerField; uniform vec4 bannerEdge; uniform vec3 bannerCrest; varying vec2 vBannerUv; float bannerBristle = 0.0;\n' + PAINT_GLSL + '\n' +
+      shader.fragmentShader
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            vec2 bu = vBannerUv;
+            // the edge: the kabura stroke down the cloth (its loaded start at the top, its split dry tail the frayed foot)
+            vec4 ed = paintTile(vec2(mix(0.1, 1.0, 1.0 - bu.y), mix(0.16, 0.84, bu.x)), bannerEdge);
+            // toward its free side and its foot the brush runs dry: the dry-brush stroke's own streaks fray the outline there (MyPaint's
+            // classic dry brush); the side sewn to the pole and the top on its cross-bar stay whole
+            // (MyPaint's strokes keep a clean edge and break only in their dry tails, measured: so the bristles' streaks come from the
+            // oil field stretched along the cloth, broad enough to outlive the oil pass)
+            float streak = paintField(vec2(bu.x * 7.0, bu.y * 0.45), bannerField).r;
+            float rim = max(1.0 - smoothstep(0.0, 0.22, 1.0 - bu.x), 1.0 - smoothstep(0.0, 0.2, bu.y));
+            if (ed.a < 0.4 || rim * 0.95 > streak + 0.12) discard;
+            // the dye: the oil field in the cloth's own space, laid along its length
+            // (streaks broad enough to outlive the oil pass's 2-6 px brush: a dye laid by hand, darker where it pooled at the edges)
+            bannerBristle = paintField(vec2(bu.y * 1.6, bu.x * 0.8), bannerField).r - 0.62;
+            float pool = 1.0 - smoothstep(0.4, 0.95, ed.a);
+            diffuseColor.rgb *= (1.0 + bannerBristle * 1.6 + (ed.r - 0.62) * 0.8) * (1.0 - 0.45 * pool);
+            // the crest: an ensō brushed with the same stroke, open where the brush lifted
+            vec2 q = (bu - vec2(0.5, 0.74)) * vec2(0.7, 1.9);
+            float rv = (length(q) - 0.15) / 0.1, ang = fract(atan(q.x, q.y) / 6.28318 + 0.62);
+            if (rv > 0.0 && rv < 1.0 && ang < 0.86) { vec4 cs = paintTile(vec2(ang / 0.86, rv), bannerEdge); diffuseColor.rgb = mix(diffuseColor.rgb, bannerCrest, smoothstep(0.3, 0.65, cs.a)); }
+          }`)
+        .replace('#include <gradientmap_pars_fragment>', THREE.ShaderChunk.gradientmap_pars_fragment.replace(
+          'vec2 coord = vec2( dotNL * 0.5 + 0.5, 0.0 );', 'vec2 coord = vec2( dotNL * 0.5 + 0.5 + bannerBristle * 0.4, 0.0 );'));
+  });
+}
 
 const loader = new GLTFLoader();
 const load = (url) => new Promise((ok, no) => loader.load(url, ok, undefined, no));
@@ -27,7 +78,7 @@ function instanced(model, mats, scene) {
   return out;
 }
 
-export async function buildEnvironment(scene, land, P) {
+export async function buildEnvironment(scene, land, P, { plant = null } = {}) {
   const [torii, temple, maples, bamboo, toro] = await Promise.all(['torii_gate', 'temple', 'maple_trees', 'bamboo', 'toro_lantern'].map((n) => load(`assets/polypizza/${n}.glb`)));
   const r = rng(42), S = land.spots, obstacles = [], placed = [];
   const free = (x, z, rad) => {
@@ -101,8 +152,10 @@ export async function buildEnvironment(scene, land, P) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 4.2, 6), new THREE.MeshToonMaterial({ color: col('ink'), gradientMap: RAMP }));
       pole.position.set(bx, by + 2.1, bz); group.add(pole);
       // a banner flies downwind (the one wind): its width laid along it, its cloth painted with the atlas's oil strokes
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.9, 1, 8), paintSurface(new THREE.MeshToonMaterial({ color: col(ci === 1 ? 'ink' : 'crimson'), gradientMap: RAMP, side: THREE.DoubleSide }), { region: 'field_b', scale: 2.2, strength: 0.4, band: 0.3 }));
-      flag.position.set(bx + WIND.x * 0.36, by + 3.0, bz + WIND.z * 0.36); flag.userData.wave = r() * 6; flag.userData.base = Math.atan2(-WIND.z, WIND.x); flag.rotation.y = flag.userData.base; group.add(flag);
+      const wave = r() * 6, cloth = new THREE.MeshToonMaterial({ color: col(ci === 1 ? 'ink' : 'crimson'), gradientMap: RAMP, side: THREE.DoubleSide });
+      const fg = new THREE.PlaneGeometry(0.7, 1.9, plant === 'solidflags' ? 1 : 10, plant === 'solidflags' ? 8 : 16); fg.setAttribute('bannerUv', fg.attributes.uv.clone());
+      const flag = new THREE.Mesh(fg, plant === 'solidflags' ? paintSurface(cloth, { region: 'field_b', scale: 2.2, strength: 0.4, band: 0.3 }) : paintBanner(cloth, { crest: ci === 1 ? 'crimson' : 'ink', wave }));
+      flag.position.set(bx + WIND.x * 0.36, by + 3.0, bz + WIND.z * 0.36); flag.userData.wave = wave; flag.userData.base = Math.atan2(-WIND.z, WIND.x); flag.rotation.y = flag.userData.base; group.add(flag);
       group.userData.flags = (group.userData.flags || []).concat(flag);
       addStaticCylinder(P, new THREE.Vector3(c.x + bx, y + by + 2, c.y + bz), 2, 0.08);
       obstacles.push({ x: c.x + bx, z: c.y + bz, r: 0.15, h: 4 });

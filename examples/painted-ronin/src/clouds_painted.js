@@ -16,6 +16,17 @@
 //  · THE HILLS HIDE THEM: the composite writes each pixel's cloud depth.
 import * as THREE from 'three';
 import { PAINT_GLSL, atlasUniforms, rect, col, paint, WIND, WIND_SPEED } from './paint.js';
+
+// THE DECK — a fair day's cumulus. The American Meteorological Society's glossary, cumulus humilis: "uniform flat bases and a general
+// similarity among clouds"; fair-weather cumulus bases sit about 500-1,500 m up (the WMO cloud atlas's humilis: base 1,300 m, top
+// 1,500 m). This valley's mountains stand ~100 m, so the deck's ONE flat base is 320 m up, well clear of every peak: no cloud hangs in
+// the hills (the owner, 8 Nov: "one big patch of clouds too that don't make sense": the old ring put them 70-150 m up, inside the ridge),
+// and a flat deck seen from below recedes in perspective, smaller and closer together toward the horizon.
+export const DECK = 320, SPAN = 1000;
+// THE PACE — what the eye reads is an ANGLE per second. Overhead cumulus 1,000-1,500 m up in a 5-10 m/s wind (the Beaufort scale's gentle
+// breeze is 3.4-5.4 m/s at 10 m, more aloft) cross 0.2-0.6°/s, far ones far less. This deck drifts 1.4 m/s: 0.25°/s straight overhead
+// from the valley floor, ~0.1°/s at 30° up (the owner, 8 Nov: "It's supposed to be going slow like a normal day!").
+export const CLOUD_DRIFT = 1.4;
 import { NOISE3D } from './noise3d.js';
 
 const FAR = 2000;
@@ -75,11 +86,23 @@ export function createPaintedClouds(scene, { count = 16, phone = false, sunDir, 
   const mass = new THREE.InstancedMesh(geo, massMat, n); mass.frustumCulled = false;
   const massScene = new THREE.Scene(); massScene.add(mass);
 
-  // the layout (drei <Cloud>): clusters on a wide ring, 70-150 m up, each a handful of puffs
-  const clouds = [];
+  // the layout (drei <Cloud>: each cloud a handful of puffs), on THE DECK: scattered over a square 2 km on a side laid along the wind (a
+  // cloud blown off its downwind edge comes round at the upwind one), each base on the one flat base, and no two closer than their own
+  // breadths, so no two merge into one patch. Plants: lowclouds (the old ring inside the ridge, at the old speed), cloudclump (crowded).
+  const clouds = [], across = new THREE.Vector3(-WIND.z, 0, WIND.x), breadth = (size) => size * 1.6;
   for (let c = 0; c < count; c++) {
-    const a = Math.random() * Math.PI * 2, r = 180 + Math.random() * 340, center = anchors[c] ? anchors[c].clone() : new THREE.Vector3(Math.cos(a) * r, 70 + Math.random() * 80, Math.sin(a) * r);
-    const size = anchors[c] ? 46 : 30 + Math.random() * 40, cl = { center, size, items: [], anchored: !!anchors[c] };
+    let center, size;
+    if (anchors[c]) { center = anchors[c].clone(); size = 46; }
+    else if (plant === 'lowclouds') { const a = Math.random() * Math.PI * 2, r = 180 + Math.random() * 340; size = 30 + Math.random() * 40; center = new THREE.Vector3(Math.cos(a) * r, 70 + Math.random() * 80, Math.sin(a) * r); }
+    else {
+      const room = plant === 'cloudclump' ? 0.12 : 1;
+      for (let tries = 0; tries < 80; tries++) {
+        size = 46 + Math.random() * 40;
+        center = WIND.clone().multiplyScalar((Math.random() * 2 - 1) * SPAN * room).addScaledVector(across, (Math.random() * 2 - 1) * SPAN * room).setY(DECK + size * 0.32);
+        if (plant === 'cloudclump' || clouds.every((o) => o.anchored || Math.hypot(o.center.x - center.x, o.center.z - center.z) >= breadth(o.size) + breadth(size))) break;
+      }
+    }
+    const cl = { center, size, items: [], anchored: !!anchors[c] };
     for (let i = 0; i < per; i++) {
       const off = new THREE.Vector3((Math.random() - 0.5) * size * 1.5, (Math.random() - 0.25) * size * 0.42, (Math.random() - 0.5) * size * 0.7);
       if (i === 0) off.set(0, size * 0.05, 0);                                // every cloud has a big heart
@@ -119,7 +142,7 @@ export function createPaintedClouds(scene, { count = 16, phone = false, sunDir, 
         float cov = c.g; if (cov < 0.04) discard;
         float light = c.r / cov, depth = c.b / cov * far, st = c.a > 0.2 ? c.a : 0.62;
         // the edge: a threshold on the blurred mass, hard far away, softer near (Sea of Thieves)
-        float w = mix(0.03, 0.14, (1.0 - smoothstep(260.0, 520.0, depth)) * edgeByDistance + 0.5 * (1.0 - edgeByDistance));
+        float w = mix(0.03, 0.14, (1.0 - smoothstep(450.0, 1100.0, depth)) * edgeByDistance + 0.5 * (1.0 - edgeByDistance));
         float alpha = smoothstep(0.5 - w, 0.5 + w, cov); if (alpha < 0.01) discard;
         // three tones (TF2's warp), the band edges carried by the bristles, each step one pixel wide
         float l = light + (st - 0.62) * 0.24, fw = fwidth(l) + 0.004;
@@ -132,7 +155,7 @@ export function createPaintedClouds(scene, { count = 16, phone = false, sunDir, 
         vec4 wd = camWorldInvProj * vec4(vUv * 2.0 - 1.0, 1.0, 1.0); vec3 view = normalize(wd.xyz / wd.w - cameraPosition);
         float edge = 1.0 - smoothstep(0.5, 0.95, cov), back = hg(dot(view, sunDir), 0.7) / hg(1.0, 0.7);
         col *= 1.0 + edge * (back * 1.8 - 0.1) * rimOn;
-        col = mix(col, horizonC, smoothstep(320.0, 1000.0, depth) * 0.45);   // the air between
+        col = mix(col, horizonC, smoothstep(700.0, 1700.0, depth) * 0.5);    // the air between (the deck's far side fades into the horizon)
         gl_FragColor = vec4(col, alpha);
         if (debugMask > 0.5) { if (alpha < 0.5) discard;                    // the walls' masks: G = 7 marks a cloud pixel
           gl_FragColor = debugMask > 1.5 ? vec4(dot(col, vec3(0.2126, 0.7152, 0.0722)), 7.0, edge, 1.0) : vec4(edge, 7.0, depth / 1000.0, 1.0); }
@@ -164,10 +187,10 @@ export function createPaintedClouds(scene, { count = 16, phone = false, sunDir, 
       compMat.uniforms.bufTexel.value.set(1 / W, 1 / H);
     },
     update(dt) {
-      const drift = WIND_SPEED * dt;
+      const drift = (plant === 'lowclouds' ? WIND_SPEED : CLOUD_DRIFT) * dt, edge = plant === 'lowclouds' ? 520 : SPAN;
       for (const cl of clouds) {
         if (!cl.anchored) cl.center.addScaledVector(WIND, drift);
-        if (cl.center.dot(WIND) > 520) cl.center.addScaledVector(WIND, -1040);    // round again, upwind
+        if (cl.center.dot(WIND) > edge) cl.center.addScaledVector(WIND, -2 * edge);    // round again, upwind
       }
       place();
     },
@@ -183,5 +206,6 @@ export function createPaintedClouds(scene, { count = 16, phone = false, sunDir, 
       renderer.setRenderTarget(prevTarget); renderer.setClearColor(prevClear, prevAlpha);
     },
     memoryMB() { return W * H * 8 * 2 / 1048576 + W * H * 4 / 1048576; },
+    deck: plant === 'lowclouds' ? null : DECK,
   };
 }
