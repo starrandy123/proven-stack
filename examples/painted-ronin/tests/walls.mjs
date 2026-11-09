@@ -979,10 +979,30 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
       B.close(); await wait(600); return rows;
     });
     console.log('  C4 calibration — the turn each clip needs, by the drawn angle:\n    ' + cal.join('\n    '));
-    const r = await page.evaluate(async () => {
+    // C10's reference: the same four wind-ups with the alignment planted off — the clip's own chest against its own pelvis
+    const refs = await (async () => { const rp = await open('test&plant=chnoalign'); await rp.page.evaluate(BW);
+      const q = await rp.page.evaluate(async () => { const { G, T, B, wait, raf, stage } = window.__BW, bn = G.ronin.bones, o = [];
+        for (const [i, theta] of [[0, 0.1], [1, 0.8], [2, -0.8], [3, 1.45]]) {
+          await stage(i); for (let k = 0; k < 30 && !B.active; k++) { B.open(G.me); if (!B.active) await wait(100); }   // after boot the brush may not open at once
+          await wait(500); B.S.theta = theta; await raf(); await raf(); await wait(300);
+          const P = bn.pelvis.getWorldQuaternion(new T.Quaternion()), q = P.clone().invert().multiply(bn.spine_03.getWorldQuaternion(new T.Quaternion()));
+          const up = bn.neck_01.getWorldPosition(new T.Vector3()).sub(bn.pelvis.getWorldPosition(new T.Vector3())).normalize().applyQuaternion(P.clone().invert());
+          const pc = B.S.pose && B.S.pose.clip; o.push({ q: q.toArray(), up: up.toArray(), open: B.active, clip: pc, t: pc ? +G.ronin.action(pc).time.toFixed(3) : null }); B.close(); await wait(700); }
+        return o; });
+      await rp.page.close(); return q; })();
+    const r = await page.evaluate(async (refs) => {
       const { G, T, B, wait, raf, stage } = window.__BW, { planeFit } = window.__CW, sw = G.ronin.sword.userData, out = [];
       for (const [i, theta] of [[0, 0.1], [1, 0.8], [2, -0.8], [3, 1.45]]) {   // level, kesa '/', gyaku-kesa '\', vertical (cutOf)
         await stage(i); B.open(G.me); await wait(500); B.S.theta = theta; await raf(); await raf();
+        // C10 the body holds: in the held wind-up, the chest (spine_03) against the pelvis, read off the bones, against the same wind-up with
+        // the alignment planted off (the reference page, below); the difference, in the pelvis's own frame, split about his spine (pelvis →
+        // neck) into a twist and a bend. (A toggle inside this page read one pose twice: raw 0° under a 46° turn. Two pages cannot.)
+        await wait(300);
+        const bn = G.ronin.bones, qOn = bn.pelvis.getWorldQuaternion(new T.Quaternion()).invert().multiply(bn.spine_03.getWorldQuaternion(new T.Quaternion()));
+        const rf = refs[out.length], qOff = new T.Quaternion().fromArray(rf.q), upL = new T.Vector3().fromArray(rf.up);
+        const myClip = B.S.pose && B.S.pose.clip, myT = myClip ? +G.ronin.action(myClip).time.toFixed(3) : null, same = B.active && rf.open && myClip === rf.clip && myT !== null && Math.abs(myT - rf.t) <= 0.01;
+        const D = qOn.clone().multiply(qOff.clone().invert()), dd = D.x * upL.x + D.y * upL.y + D.z * upL.z, twQ = new T.Quaternion(upL.x * dd, upL.y * dd, upL.z * dd, D.w).normalize(), swQ = D.clone().multiply(twQ.clone().invert());
+        const ang = (q) => 2 * Math.acos(Math.min(1, Math.abs(q.w))) * 57.3, body = { twist: +ang(twQ).toFixed(1), bend: +ang(swQ).toFixed(1), raw: +ang(D).toFixed(1), same, pose: `${myClip}@${myT} vs ${rf.clip}@${rf.t}${rf.open ? '' : ' (ref NOT open)'}` };   // (never `sw`: that is the sword's data here)
         const n0 = B.events.length, smp = []; B.release(G.me); const st = B.S.swing;
         // one sample per POSE: the hit-stop holds the clip at contact, and a fit of one pose repeated is no plane (the first reading of the
         // slam was 0° at 0 cm: one blade, five times)
@@ -995,11 +1015,15 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
         let fit = null; if (c) { let win = 2 / 60, use = []; while ((use = smp.filter((s) => Math.abs(s.t - c.contactT) <= win + 1e-4)).length < 3 && win < 5 / 60) win += 1 / 60;
           const P = []; for (const s of use) for (let j = 0; j <= 4; j++) P.push(s.h.clone().lerp(s.p, j / 4));
           if (use.length >= 3) { const f = planeFit(P), n = c.shown.n; fit = { off: +(Math.acos(Math.min(1, Math.abs(f.n.dot(n)))) * 57.3).toFixed(1), rms: +(100 * f.rms).toFixed(1), pts: use.length, win: +(win * 60).toFixed(0), carry: use.map((s) => (s.w === null ? '-' : s.w.toFixed(2))).join('/') }; } }
-        const al = c && c.align; out.push({ cut: c ? c.swing : st && st.cut.id, fit, need: A ? +(A.need * 57.3).toFixed(1) : null, got: A ? +(A.got * 57.3).toFixed(1) : null, early: c ? +(c.clipTime - c.contactT).toFixed(3) : null,
+        const al = c && c.align; out.push({ body, cut: c ? c.swing : st && st.cut.id, fit, need: A ? +(A.need * 57.3).toFixed(1) : null, got: A ? +(A.got * 57.3).toFixed(1) : null, early: c ? +(c.clipTime - c.contactT).toFixed(3) : null,
           arm: al && al.wantMove !== undefined ? `hand asked ${(100 * al.wantMove).toFixed(0)} cm, gave ${(100 * al.moved).toFixed(0)}, short ${(100 * (al.miss || 0)).toFixed(1)}; wrist asked ${(al.wantTurn * 57.3).toFixed(0)}°, gave ${(al.turned * 57.3).toFixed(0)}°` : '' });
         B.close(); await wait(700); }
       return out;
-    });
+    }, refs);
+    // C10: the alignment's own turn of his chest stays in a body's range — a twist ≤ 35° (the thoracic spine's rotation, Physio-Pedia) and
+    // a bend ≤ 15° (ours, under its lateral flexion's 20-40°: the clip already leans); C4 alone passed a body folded at the waist
+    const bw = { twist: Math.max(...r.map((x) => x.body.twist)), bend: Math.max(...r.map((x) => x.body.bend)) };
+    wall('C10 the body holds', !errors.length && r.length === 4 && r.every((x) => x.body.same) && bw.twist <= 35 && bw.bend <= 15, r.map((x) => `${x.cut}: ${x.body.same ? '' : 'NOT THE SAME POSE (' + x.body.pose + ') '}twist ${x.body.twist}°, bend ${x.body.bend}° (of ${x.body.raw}°)`).join(' · ') + ` — worst twist ${bw.twist}° (≤ 35), bend ${bw.bend}° (≤ 15)`);
     const worst = Math.max(...r.map((x) => (x.fit ? x.fit.off : 99)));
     wall('C4 aligned', !errors.length && r.length === 4 && worst <= 12, r.map((x) => `${x.cut}: ${x.fit ? `the blade's plane ${x.fit.off}° off the drawn one (${x.fit.rms} cm rms over ${x.fit.pts} poses within ±${x.fit.win} frames; carry ${x.fit.carry})` : 'NO CONTACT or < 3 poses'}${x.need !== null ? `, the turn ${x.got}° of ${x.need}°` : ''}, contact ${x.early} s from the clip's${x.arm ? ' (' + x.arm + ')' : ''}`).join(' · ') + ` — worst ${worst}° (≤ 12)`);
     if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));

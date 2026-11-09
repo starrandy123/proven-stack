@@ -19,9 +19,13 @@ import * as THREE from 'three';
 
 export const ALIGN = {
   chain: [['spine_02', 0.35], ['spine_03', 0.35], ['clavicle_r', 0.30]],  // the turn's shares, parent first (ours)
-  limit: 60 * Math.PI / 180, knee: 0.75,                                  // the clamp, and where its soft knee begins (ours; Godot's names): no
-                                                                          // authored cut lies within 36° of most drawn planes (wall C4's
-                                                                          // calibration), so the body takes the larger share (a 60° need → 45°)
+  // THE BODY'S OWN RANGES (wall C10): the turn is split, swing from twist, about his own spine (pelvis → neck): a twist up to 35°, the
+  // thoracic spine's rotation (Physio-Pedia, Functional Anatomy of the Thoracic Spine and Rib Cage: "Rotation: 35 degrees"; an inertial
+  // study read 33.5-37.1°), and a bend of at most 10° (ours: under its lateral flexion's 20-40°, the clip already leans). The first turn
+  // took the whole least rotation between the planes, up to 60° about ANY axis, and folded him sideways at the waist (the look probe,
+  // receipts/2026-11-09_blade/frames/part2_rising_windup_align_off_vs_on.jpg) while C4 passed: kept only as plant chcontort.
+  twist: 35 * Math.PI / 180, bend: 10 * Math.PI / 180, knee: 0.75,        // the soft knee from 75 % (Godot's names)
+  limit: 60 * Math.PI / 180,                                              // plant chcontort's old whole-turn clamp
   tauIn: 0.05, tauOut: 0.07,                                              // in: ~95 % within 0.15 s; out: ~95 % within 0.2 s (ours, research L)
   win: [-0.10, 0.12], ramp: 0.05,                                         // the carry: whole over the brush's own contact search (blade.js
                                                                           // afterAnimate: the clip's contact − 0.1 to + 0.12 s), ramped 0.05 s
@@ -80,7 +84,7 @@ export function clipPlaneNormal(clipdata, clip) {
 export function createAlign(person, clipdata, { plant = null } = {}) {
   const bones = person.bones, chain = ALIGN.chain.map(([n, w]) => [bones[n], w]);
   const arm = { root: bones.upperarm_r, mid: bones.lowerarm_r, end: bones.hand_r };
-  for (const [k, b] of [...ALIGN.chain.map(([n], i) => [n, chain[i][0]]), ['upperarm_r', arm.root], ['lowerarm_r', arm.mid], ['hand_r', arm.end]]) if (!b) throw new Error('[align] the rig has no bone ' + k);
+  for (const [k, b] of [...ALIGN.chain.map(([n], i) => [n, chain[i][0]]), ['upperarm_r', arm.root], ['lowerarm_r', arm.mid], ['hand_r', arm.end], ['pelvis', bones.pelvis], ['neck_01', bones.neck_01]]) if (!b) throw new Error('[align] the rig has no bone ' + k);
   const S = { on: false, want: new THREE.Quaternion(), turn: new THREE.Quaternion(), need: 0, got: 0, carry: 0, moved: 0, turned: 0 };
   const v = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), q = [0, 1, 2].map(() => new THREE.Quaternion()), axis = new THREE.Vector3();
 
@@ -89,19 +93,40 @@ export function createAlign(person, clipdata, { plant = null } = {}) {
   function aim(n, clip, facing) {
     const nc = clipPlaneNormal(clipdata, clip); if (!nc) { S.on = false; return; }
     nc.applyAxisAngle(Y, facing); const nd = n.clone().normalize(); if (nd.dot(nc) < 0) nd.negate();
-    const r = new THREE.Quaternion().setFromUnitVectors(nc, nd), ang = angleOf(r); axisOf(r, axis);
-    S.need = ang; S.got = remapDamped(0, ALIGN.limit, ALIGN.knee, ang);
-    S.want.setFromAxisAngle(axis, S.got); S.on = plant !== 'chnoalign';
+    const r = new THREE.Quaternion().setFromUnitVectors(nc, nd), ang = angleOf(r); S.need = ang;
+    if (plant === 'chcontort') { axisOf(r, axis); S.got = remapDamped(0, ALIGN.limit, ALIGN.knee, ang); S.want.setFromAxisAngle(axis, S.got); }
+    else {
+      // swing-twist about the spine: the twist is r's turn about `up`, the swing the rest (r = swing · twist); each kept in the body's range
+      const up = bones.neck_01.getWorldPosition(v[0]).sub(bones.pelvis.getWorldPosition(v[1])).normalize(), d = r.x * up.x + r.y * up.y + r.z * up.z;
+      const tw = new THREE.Quaternion(up.x * d, up.y * d, up.z * d, r.w); if (tw.lengthSq() < 1e-12) tw.identity(); else tw.normalize();
+      const sw = r.clone().multiply(tw.clone().invert());
+      const ta = remapDamped(0, ALIGN.twist, ALIGN.knee, angleOf(tw)), sa = remapDamped(0, ALIGN.bend, ALIGN.knee, angleOf(sw));
+      S.want.setFromAxisAngle(axisOf(sw, v[2]), sa).multiply(q[0].setFromAxisAngle(axisOf(tw, v[3]), ta));
+      S.got = angleOf(S.want); S.twist = ta; S.bend = sa;
+    }
+    S.on = plant !== 'chnoalign';
   }
   function letGo() { S.on = false; }
 
   // every frame after the mixer has posed him (his own clock): the turn eased toward what it should be, laid down the chain, parent first
+  // THE MIXER LEAVES A HELD BONE AS WE LEFT IT. three.js writes a bone only when its value changed since its last write (PropertyMixer.apply,
+  // vendor/three/three.core.js: "value has changed -> update scene graph"), so in a held pose (the brush's wind-up at speed 0, a hit-stop) a
+  // turn laid after the mixer lands on last frame's turned bone and compounds: the drift probe read his chest +22° a frame while the turn
+  // held 31-34° (study/drift probe; it was the fold of the look probe, and C10's 151° against a 15° turn). So every bone we touch is put back
+  // to the pose the mixer gave it before it is turned again: if it still holds exactly what we left, the mixer did not write it.
+  const touched = [...chain.map(([b]) => b), arm.root, arm.mid, arm.end];
+  const base = new Map(touched.map((b) => [b, b.quaternion.clone()])), left = new Map();
+  function settle() { for (const b of touched) { const l = left.get(b); if (l && b.quaternion.equals(l)) b.quaternion.copy(base.get(b)); else base.get(b).copy(b.quaternion); }
+    left.clear(); touched[0].parent.updateMatrixWorld(true); }
+  function leave() { for (const b of touched) left.set(b, (left.get(b) || new THREE.Quaternion()).copy(b.quaternion)); }
   function update(dt) {
+    if (plant !== 'chcompound') settle();                                 // plant chcompound: the turn laid on the last one, as it first was
     const k = 1 - Math.exp(-Math.max(0, dt) / (S.on ? ALIGN.tauIn : ALIGN.tauOut));
     S.turn.slerp(S.on ? S.want : I, k);
-    const ang = angleOf(S.turn); if (ang < 1e-4) { if (!S.on) S.turn.identity(); return; }
+    const ang = angleOf(S.turn); if (ang < 1e-4) { if (!S.on) S.turn.identity(); leave(); return; }
     axisOf(S.turn, axis);
     for (const [b, share] of chain) rotateWorld(b, q[0].setFromAxisAngle(axis, ang * share));
+    leave();
   }
 
   // through the contact window (clip seconds from the clip's contact), after the turn: the blade laid into the plane (n through o) by the
@@ -134,6 +159,7 @@ export function createAlign(person, clipdata, { plant = null } = {}) {
     }
     setWorld(arm.end, r.clone().multiply(hw0));                           // the hand holds the blade on its shadow in the plane
     S.miss = arm.end.getWorldPosition(v[4]).distanceTo(target);           // how far the arm fell short of where it was sent
+    leave();                                                              // the arm as we leave it (the hit-stop holds the mixer still too)
     return w;
   }
   // where this clip's contact point (its tip at the contact frame, clipdata.json) lands once the turn it should hold is laid on, pivoting on
