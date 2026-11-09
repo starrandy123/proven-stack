@@ -17,6 +17,7 @@ import { Bandits } from './enemies.js';
 import { createVfx } from './vfx.js';
 import { startAudio, updateAudio, play as sfx, setHush } from './audio.js';
 import { createBrush } from './blade.js';
+import { createAlign } from './align.js';
 import { createBirds, createClouds, swayLeaves } from './life.js';
 import { loadPaint, paint, paintFogAll, paintSurface, measureHorizon, paintMemoryMB, PALETTE, RAMP, WIND } from './paint.js';
 import { paintSky } from './sky_painted.js';
@@ -378,8 +379,14 @@ loading('setting out the straw (the brush)');
 const me = { get pos() { return pos; }, get facing() { return facing; }, set facing(v) { facing = v; }, setPos: (x, y, z) => player.setPosition(x, y, z),
   get alive() { return pc.alive; }, get busy() { return !!(pc.strike || pc.special || pc.roll > 0 || pc.chiburi); } };
 const firstView = new THREE.Vector3(-Math.sin(cam.yaw), 0, -Math.cos(cam.yaw)), tameshi = new THREE.Vector3(land.spots.tameshi.x, 0, land.spots.tameshi.y);
-const brush = await createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx, painterly, contactOf, bandits, say, plant: PLANT, lantern: env.props && env.props.toro,
+// the body aligns (align.js, research L §6 B): the turn of the spine toward a drawn plane and the arm's carry of the blade into it, after
+// the mixer every frame; the brush and the chain say what to align to
+const align = createAlign(ronin, clipdata, { plant: PLANT });
+const brush = await createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx, painterly, contactOf, bandits, say, plant: PLANT, lantern: env.props && env.props.toro, align,
   spot: tameshi, face: Math.atan2(firstView.x, firstView.z), hud: { pots: [...document.querySelectorAll('#ink i')] } });
+// the brush's line is a shader of its own: compiled now, at boot, so the first held moment never waits on it (WebKit compiles in the frame
+// that first draws it: B3 read the clock 0.479 s late and B15 an unsettled grade on the first open)
+brush.line.visible = true; renderer.compile(brush.line, camera, scene); brush.line.visible = false;
 const STEP = 1 / 60;
 
 function frame(now) {
@@ -493,6 +500,7 @@ function frame(now) {
   ronin.root.position.copy(pos); ronin.root.rotation.y = facing;
   { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike && !pc.chiburi && !hold && !brush.holdsBody) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
   ronin.update(brush.selfClock ? brush.selfDt(realDt) : dt);              // in the brush his swing runs on the real clock: the world holds, he does not
+  align.update(brush.selfClock ? brush.selfDt(realDt) : dt);              // the turn laid onto the pose the mixer just made (once a frame)
   brush.afterAnimate(me);
   if (pc.chiburi) {                                                       // the flick's drops, off the REAL tip, at the clip's own frames
     const ch = pc.chiburi, d = clipdata[CHIBURI.clip]; ch.t += dt;
@@ -595,5 +603,5 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); co
 window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, LEAP_STRIKE, lock, LOCK_RANGE, birds, clouds, sky, skyPaint, paint, PALETTE, RAMP, WIND, sunDir,
   get facing() { return facing; }, set facing(v) { facing = v; },
   CHIBURI, tipTravel, GRID: { N, SPACING }, get blood() { return blood; }, get still() { return still; }, get hold() { return hold; }, get time() { return time; },
-  brush, input, me, contactOf };
+  brush, input, me, contactOf, composer, align };
 requestAnimationFrame(frame);

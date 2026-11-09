@@ -55,7 +55,7 @@ export function volumeOf(g) {
 
 const STRAW = { r: 0.07, len: 0.9, segs: 40 }, STALK = { r: 0.035, len: 2.2, segs: 28, wall: 0.72, node: 0.42 }, STAND = { h: 0.61, top: 0.17 };
 
-export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx, painterly, contactOf, bandits, say, plant = null, spot, face = 0, hud = null, lantern = null }) {
+export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx, painterly, contactOf, bandits, say, plant = null, spot, face = 0, hud = null, lantern = null, align = null }) {
   const PL = plant || '';
   const T = { v: new THREE.Vector3(), w: new THREE.Vector3(), q: new THREE.Quaternion(), m: new THREE.Matrix4(), box: new THREE.Box3() };
   const baseFov = camera.fov;
@@ -123,8 +123,21 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
         float fray = smoothstep(0.02, 0.2, e + (t.r - 0.62) * 0.18); gl_FragColor = vec4(paperC, opacity * fray * (0.45 + 0.55 * t.a)); }` }));
   sheet.name = 'brush-sheet'; sheet.userData.painted = 'brush'; sheet.renderOrder = 5; sheet.frustumCulled = false; sheet.visible = false; scene.add(sheet);
   // the line is the ensō's own ink stroke texture (vfx.js): the same object, so the page holds the atlas once (a phone holds 192 MB)
-  const strokeTex = vfx.enso.material.map;
-  const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: strokeTex, alphaMap: strokeTex, color: col('crimson'), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, opacity: 0 }));
+  const strokeTex = vfx.enso.material.map; strokeTex.updateMatrix();
+  // THE LINE, SEEN (research L §1, §6 A; the owner: "we need to show the lines"): wall C7 read take 5's line at 1.1 CSS px across on a phone,
+  // and the oil pass KEPT it (153 % of the scene's own crimson: it spreads it) — the line was faint in the scene itself: crimson multiplied
+  // by the stroke tile's own tone, and hidden behind the front of the mat it crossed. Now it is the crimson itself, the tile only its alpha
+  // (the bristles' value, G, as every stroke here reads it), laid over what it cuts, 0.06 m wide (ours, from 0.035), drawn as the finger
+  // draws it (C9). Plant bmthinline: the old line.
+  const LINE_W = PL === 'bmthinline' ? 0.035 : 0.06;
+  const inkLine = () => PL === 'bmthinline'
+    ? new THREE.MeshBasicMaterial({ map: strokeTex, alphaMap: strokeTex, color: col('crimson'), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, opacity: 0 })
+    : new THREE.ShaderMaterial({ transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+      uniforms: { map: { value: strokeTex }, uvT: { value: strokeTex.matrix }, color: { value: col('crimson') }, on: { value: 0 } },
+      vertexShader: 'uniform mat3 uvT; varying vec2 vUv; void main(){ vUv = (uvT * vec3(uv, 1.0)).xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D map; uniform vec3 color; uniform float on; varying vec2 vUv; void main(){ float a = clamp(texture2D(map, vUv).g * 1.6, 0.0, 1.0) * on; if (a < 0.02) discard; gl_FragColor = vec4(color, a); }' });
+  const setOn = (m, v) => { if (m.uniforms) m.uniforms.on.value = v; else m.opacity = v; };
+  const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), inkLine());
   line.name = 'brush-line'; line.userData.painted = 'stroke'; line.renderOrder = 6; line.frustumCulled = false; line.visible = false; scene.add(line);
 
   // ── the bits a cut throws: straw and splinters, painted from the atlas's flecks in the body's swatches, on the world's clock ──
@@ -216,7 +229,14 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   // ── the held moment ──
   const S = { open: false, toggled: false, pressedAt: 0, ink: BRUSH.pots, ts: 1, look: 0, focus: null, aim: new THREE.Vector3(), theta: 0.55, cut: cutOf(0.55),
     screenNew: null, aimY: null, n: new THREE.Vector3(0, 1, 0), o: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0), toAim: new THREE.Vector3(0, 0, 1),
-    swing: null, freeze: 0, real: 0, pose: null, saved: null, linger: 0, lens: 0, cutThisTime: false };
+    swing: null, freeze: 0, real: 0, pose: null, saved: null, linger: 0, lens: 0, cutThisTime: false,
+    draw: { t0: -1.2, t1: -1.2, mode: 'auto' } };                     // the line as drawn: metres from the aim along it, start and end
+  // a screen point laid onto the cut line as the screen shows it: metres from the aim along S.dir (C9: the line is drawn as the finger draws)
+  function alongLine(sx, sy) {
+    const a = S.aim.clone().project(camera), b = S.aim.clone().addScaledVector(S.dir, 0.5).project(camera);
+    const ax = (a.x + 1) / 2 * innerWidth, ay = (1 - a.y) / 2 * innerHeight, bx = (b.x + 1) / 2 * innerWidth, by = (1 - b.y) / 2 * innerHeight, L = Math.hypot(bx - ax, by - ay);
+    return L < 1e-3 ? 0 : THREE.MathUtils.clamp(((sx - ax) * (bx - ax) + (sy - ay) * (by - ay)) / (L * L) * 0.5, -1.6, 1.6);
+  }
   const pieceOf = (mesh) => pieces.find((x) => x.mesh === mesh);
   const centerOf = (x, out = new THREE.Vector3()) => { T.box.setFromObject(x.mesh); return T.box.getCenter(out); };
   function chooseFocus(me) {
@@ -264,13 +284,14 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   function open(me, toggled = false) {
     if (S.open || S.ink < 1 || !me.alive || me.busy) return false;
     S.open = true; S.toggled = toggled; S.pressedAt = S.real; S.screenNew = null; S.aimY = null; S.focus = chooseFocus(me);
+    S.draw.t0 = S.draw.t1 = -1.2; S.draw.mode = 'auto';
     if (!S.saved) S.saved = { dist: cam.dist, pitch: cam.pitch };
     S.cut = cutOf(S.theta); aimPlane(me); pose(S.cut);
     S.flash = 0.45; sfx('breath'); log({ kind: 'open', real: S.real, t: clock.t }); return true;
   }
   function close() {
     if (!S.open) return; S.open = false; S.toggled = false;
-    if (!S.swing) ronin.play('Sword_Idle', { loop: true, fade: 0.2 });
+    if (!S.swing) { ronin.play('Sword_Idle', { loop: true, fade: 0.2 }); if (align) align.letGo(); }
     S.linger = S.cutThisTime ? BRUSH.cam.linger : 0; S.cutThisTime = false;
     sfx('exhale'); log({ kind: 'close', real: S.real, t: clock.t });
   }
@@ -284,7 +305,7 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
     if (S.pose !== cut) pose(cut);
     const a = ronin.action(cut.clip); a.setEffectiveTimeScale(BRUSH.swingRate);
     S.swing = { cut, C, a, at: S.real, done: false, n: S.n.clone(), o: S.o.clone(), dir: S.dir.clone(), aim: S.aim.clone(), sweep: null, wait: PL === 'bmlate' ? 0.3 : 0 };
-    S.swing.dirAt = S.dir.clone();
+    S.swing.dirAt = S.dir.clone(); S.draw.mode = 'cut';                // the cut completes the line it follows
     sfx('swing'); log({ kind: 'release', real: S.real, t: clock.t, theta: S.theta, cut: cut.id, dir: S.dir.clone(), sheet: { n: new THREE.Vector3(0, 0, 1).applyQuaternion(sheet.quaternion), o: sheet.position.clone() } }); return true;
   }
   // the cut itself, on the shown plane (plant bmskew turns it 20° off the sheet)
@@ -351,7 +372,9 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
       sfx('cut', 0.9); if (kinds.has('straw')) sfx('straw'); if (kinds.has('stalk')) sfx('knock');
       say(st.cut.label, 900);
     }
-    log({ kind: 'contact', real: S.real, t: clock.t, cut, theta: S.theta, swing: st.cut.id, clipTime: st.a.time, contactT: st.C.t, nearT: st.nearT, near: st.near, dir: st.dir.clone(), tip: ronin.sword.userData.tip.getWorldPosition(new THREE.Vector3()), n: n.clone(), o: o.clone(), shown: { n: st.n.clone(), o: st.o.clone() } });
+    log({ kind: 'contact', real: S.real, t: clock.t, cut, theta: S.theta, swing: st.cut.id, clipTime: st.a.time, contactT: st.C.t, nearT: st.nearT, near: st.near, dir: st.dir.clone(), tip: ronin.sword.userData.tip.getWorldPosition(new THREE.Vector3()), n: n.clone(), o: o.clone(), shown: { n: st.n.clone(), o: st.o.clone() },
+      align: align ? { need: align.S.need, got: align.S.got, carry: align.S.carry, moved: align.S.moved, turned: align.S.turned, wantMove: align.S.wantMove, wantTurn: align.S.wantTurn, miss: align.S.miss } : null });
+    if (align) align.letGo();                                           // the turn eases out after the cut (the carry holds its window)
   }
 
   // ── every frame, before the world steps (real seconds; the input of this frame; the ronin as main.js holds him) ──
@@ -390,12 +413,24 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
       const cut = cutOf(S.theta);
       if (cut !== S.cut) { S.cut = cut; if (!S.swing) pose(cut); }
       // he turns so the line's cut meets the focus where its clip's blade crosses in front of him (strike()'s own turn)
-      if (S.focus) {
-        const c = centerOf(S.focus), C = contactOf((S.swing ? S.swing.cut : S.cut).clip), fa = Math.atan2(c.x - me.pos.x, c.z - me.pos.z) - Math.atan2(C.off, C.reach);
+      if (S.focus) {                                                      // ...by where the TURNED contact lands, once the body aligns (align.js)
+        const clip = (S.swing ? S.swing.cut : S.cut).clip, c = centerOf(S.focus), C = (align && align.turnedContact(clip, me.facing, me.pos)) || contactOf(clip), fa = Math.atan2(c.x - me.pos.x, c.z - me.pos.z) - Math.atan2(C.off, C.reach);
         const d = Math.atan2(Math.sin(fa - me.facing), Math.cos(fa - me.facing)); me.facing += d * Math.min(1, realDt * 12);
       }
       aimPlane(me);
+      // the line as the finger draws it: from where the stroke began to where the finger is, both laid onto the cut line (plant bmwholeline:
+      // the whole line from the first touch, as take 5 had it)
+      if (k && k.down && PL !== 'bmwholeline') { S.draw.t0 = alongLine(k.x0, k.y0); S.draw.t1 = alongLine(k.x, k.y); S.draw.mode = 'finger'; }
+      // the body aligns (align.js): the cut the line names turned toward the plane, while it is aimed and through its swing
+      if (align) { const st = S.swing; if (st && !st.done) align.aim(st.n, st.cut.clip, me.facing); else if (!st) align.aim(S.n, S.cut.clip, me.facing); }
     }
+    // the line's own pace when no finger draws it: drawn out by itself (a key's cut) over 0.15 s, and completed by the cut over 0.08 s so it
+    // spans the target (ours)
+    { const D = S.draw, full = 1.2, toward = (x, y, v) => (x < y ? Math.min(y, x + v) : Math.max(y, x - v));
+      if (PL === 'bmwholeline') { D.t0 = -full; D.t1 = full; }
+      else if (D.mode === 'auto') { D.t0 = -full; D.t1 = Math.min(full, D.t1 + realDt * 2 * full / 0.15); }
+      else if (D.mode === 'cut') { const s = D.t1 >= D.t0 ? 1 : -1, v = realDt * 2 * full / 0.08;
+        D.t0 = toward(D.t0, s > 0 ? Math.min(D.t0, -0.6) : Math.max(D.t0, 0.6), v); D.t1 = toward(D.t1, s > 0 ? Math.max(D.t1, 0.6) : Math.min(D.t1, -0.6), v); } }
     // the camera, through cam alone: in over the right shoulder, low, the field of view narrowed; back to where it was after
     S.me = me;
     // the linger: the shot holds on the cut while time comes back, and lets go at once if he moves or acts
@@ -419,11 +454,13 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
     const L = S.look;
     painterly.brush.wash.value = PL === 'bmnowash' ? 0 : L; painterly.brush.flash.value = PL === 'bmnowash' ? 0 : S.flash;
     painterly.brush.focusAmt.value = L; if (S.focus) painterly.brush.focusDepth.value = camera.position.distanceTo(S.aim);
-    sheet.visible = line.visible = L > 0.01; sheet.material.uniforms.opacity.value = 0.13 * L; line.material.opacity = 0.95 * L; lineU.bmOn.value = S.focus ? L : 0;
-    if (L > 0.01) {
-      line.position.copy(S.aim); line.scale.set(2.4, 0.035, 1);
-      const z = camera.position.clone().sub(S.aim); z.addScaledVector(S.dir, -z.dot(S.dir)).normalize();
-      line.quaternion.setFromRotationMatrix(T.m.makeBasis(S.dir, new THREE.Vector3().crossVectors(z, S.dir), z));
+    sheet.visible = line.visible = L > 0.01; sheet.material.uniforms.opacity.value = 0.13 * L; setOn(line.material, 0.95 * L); lineU.bmOn.value = S.focus ? L : 0;
+    if (L > 0.01) {                                                     // the drawn part of the line, its pressed start where the stroke began
+      const D = S.draw, len = Math.max(0.04, Math.abs(D.t1 - D.t0)), x = S.dir.clone().multiplyScalar(D.t1 >= D.t0 ? 1 : -1);
+      line.position.copy(S.aim).addScaledVector(S.dir, (D.t0 + D.t1) / 2);
+      line.scale.set(len, LINE_W * Math.min(1, 0.4 + 0.6 * len / 0.15), 1);   // it widens from its press over its first 0.15 m (ours)
+      const z = camera.position.clone().sub(line.position); z.addScaledVector(x, -z.dot(x)).normalize();
+      line.quaternion.setFromRotationMatrix(T.m.makeBasis(x, new THREE.Vector3().crossVectors(z, x), z));
     }
     if (hud) { const full = Math.floor(S.ink + 1e-6); hud.pots.forEach((el, i) => { el.className = i < full ? 'full' : i < S.ink ? 'part' : ''; }); }
     document.body.classList.toggle('brush-open', S.open); document.body.classList.toggle('brush-near', !S.open && !!chooseFocus(me));
@@ -437,12 +474,16 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
     const k = THREE.MathUtils.clamp(p.clone().sub(a).dot(ab) / Math.max(ab.lengthSq(), 1e-6), 0, 1); return a.addScaledVector(ab, k).distanceTo(p); };
   function afterAnimate(me) {
     const st = S.swing; if (!st) return;
+    if (align) align.carry(st.n, st.o, st.a.time - st.C.t);             // the arm lays the blade into the shown plane through its contact window
+
     if (!st.done && st.a.time >= st.C.t - 0.1) {
       const d = bladeTo(st.aim);
       // a real pass: the distance has fallen and turns back up (a swing's wind-back first moves the tip away), or the window ends
       if (st.near === undefined || d < st.near) { st.near = d; st.nearT = st.a.time; }
       if (st.prev !== undefined && d < st.prev - 1e-4) st.falling = true;
-      const passed = st.falling && d > st.near + 0.01;
+      // the rise that says it passed is relative (ours): 1 cm over a pass at 0.92 m let a wobble of the carried arm read as the contact in
+      // WebKit (B14: the slice 0.92 m from the aim); 15 % of the nearest distance holds a far wobble, and a true pass still fires in a frame
+      const passed = st.falling && d > st.near * 1.15 + 0.01;
       st.prev = d;
       if (passed || st.a.time >= st.C.t + 0.12) { if (st.wait > 0) st.wait -= 1 / 60; else contact(me); }
     }
@@ -486,7 +527,7 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   function frameTarget(out, me = S.me) { return out.copy(me.pos).add(new THREE.Vector3(0, 1.35, 0)).lerp(S.aim, BRUSH.cam.look); }
 
   return {
-    BRUSH, CUTS, S, stands, pieces, events, sheet, line, lineU, materials: M, bits, clock,
+    BRUSH, CUTS, S, stands, pieces, events, sheet, line, lineU, materials: M, bits, clock, align, inkLine,
     get active() { return S.open; }, get timeScale() { return S.ts; }, get look() { return S.look; }, get framing() { return S.look > 0 || S.linger > 0; },
     get holdsBody() { return S.open || !!S.swing; }, get selfClock() { return S.open || !!S.swing; }, selfDt: (realDt) => (S.freeze > 0 ? 0 : realDt),
     frame, afterAnimate, sync, frameTarget, open, close, release, cutOf, aimPlane, volumeOf,

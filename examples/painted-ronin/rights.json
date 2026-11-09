@@ -110,6 +110,12 @@
    "by": "Ian McEwan, Ashima Arts; Stefan Gustavson",
    "license": "MIT",
    "from": "github.com/stegu/webgl-noise src/noise3D.glsl ('Copyright (C) 2011 Ashima Arts … Distributed under the MIT License')"
+  },
+  {
+   "what": "The body's alignment to a drawn cut (src/align.js): the soft angle limit (remap_damped + get_bspline_y) and the two-bone IK solver (TwoBoneIK3D::_process_joints, SkeletonModifier3D::get_projected_normal), ported to JavaScript",
+   "by": "Juan Linietsky, Ariel Manzur and the Godot Engine contributors",
+   "license": "MIT",
+   "from": "github.com/godotengine/godot master: scene/3d/look_at_modifier_3d.cpp, scene/3d/two_bone_ik_3d.cpp, scene/3d/skeleton_modifier_3d.cpp (LICENSE.txt: 'Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.')"
   }
  ]
 }

@@ -873,6 +873,140 @@ if (want('B')) {
   }
 }
 
+// ── BLOCK C: the brush, part 2 — lines you see, a body that aligns, the chain on bandits (research L: receipts/2026-11-07_stack/research/
+// L_brush_chain.md; the owner after take 5: "we need to show the lines and moving the body to align and slash") ──
+//   C7 the line seen — at a phone's size, upright and turned, the stroke being drawn shows its crimson in the FINAL picture: its own pixels
+//                  (the frame with it against the frame without it) at least C7_WIDE CSS px across on average along its drawn length, and
+//                  most of what the scene draws of it survives the oil pass (the scene alone, what the pass is handed, read the same way, so
+//                  a red names the pass that ate it). Take 5's line did not read at all (research L §1)                     plant bmthinline
+//   C9 drawn as drawn — the line is laid as the finger draws it: halfway through a drag its drawn length on the screen is half of what it
+//                  is at the drag's end (± 15 %), never the whole line from the first touch                                  plant bmwholeline
+// C7's floor, calibrated on the two lines (ours): take 5's line read 1.1 / 1.7 CSS px (upright / turned), and drawn as the finger draws at its
+// old width and material (plant bmthinline) 3.67 / 1.03; the new line reads 21.7 / 12.0 at its worst. A first floor of 3 let the old line pass
+// upright; 6 holds them apart both ways.
+const C7_WIDE = 6;
+const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
+  const frame = (fn) => new Promise((ok) => requestAnimationFrame(() => ok(fn())));
+  // a touch on the game's canvas, through its own handlers (as B7)
+  const cv = () => G.renderer.domElement;
+  const touch = (type, x, y) => { const e = new Event(type, { bubbles: true, cancelable: true }), t = [{ identifier: 7, clientX: x, clientY: y, target: cv() }];
+    Object.defineProperty(e, 'changedTouches', { value: t }); Object.defineProperty(e, 'touches', { value: type === 'touchend' ? [] : t }); Object.defineProperty(e, 'targetTouches', { value: type === 'touchend' ? [] : t }); cv().dispatchEvent(e); };
+  // the line's own pixels: ONE frame drawn twice, with it and without it (the game's own composer re-run with the line out of the scene, then
+  // once more with it back), so nothing else can differ — two frames in a row let the mats' crimson lines, the leaves and the easing camera
+  // in, and C9 read a line longer halfway than whole while the line itself was 0.283 then 0.552 m. Each read as shown (the final picture)
+  // and as the scene alone draws it (what the oil pass is handed). Crimson: red over 1.6x green and blue.
+  async function linePixels() {
+    const R = G.renderer, gl = R.getContext(), sz = R.getDrawingBufferSize(new T.Vector2()), W = sz.x, H = sz.y, dpr = R.getPixelRatio(), rt = new T.WebGLRenderTarget(W, H);
+    const read = () => { const f = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, f); return f; };
+    const alone = () => { const keep = R.getRenderTarget(); R.setRenderTarget(rt); R.clear(); R.render(G.scene, G.camera); const s = new Uint8Array(W * H * 4); R.readRenderTargetPixels(rt, 0, 0, W, H, s); R.setRenderTarget(keep); return s; };
+    const { a, b } = await frame(() => { const a = { f: read(), s: alone() }; G.scene.remove(B.line); G.composer.render(0); const b = { f: read(), s: alone() }; G.scene.add(B.line); G.composer.render(0); return { a, b }; });
+    rt.dispose();
+    // the cut line on the screen (device px, rows from the bottom as read): its axis through the aim, for the drawn extent along it
+    const P = (v) => { const q = v.clone().project(G.camera); return [(q.x + 1) / 2 * W, (q.y + 1) / 2 * H]; };
+    const [cx, cy] = P(B.S.aim), [dx, dy] = P(B.S.aim.clone().addScaledVector(B.S.dir, 0.5)), l = Math.hypot(dx - cx, dy - cy) || 1, ux = (dx - cx) / l, uy = (dy - cy) / l;
+    const red = (p, i) => p[i] > 90 && p[i] > 1.6 * p[i + 1] && p[i] > 1.6 * p[i + 2];
+    const moved = (p, q, i) => Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]) > 36;
+    let nf = 0, ns = 0, lo = 1e9, hi = -1e9;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4;
+      if (moved(a.f, b.f, i) && red(a.f, i)) { nf++; const t = (x - cx) * ux + (y - cy) * uy; if (t < lo) lo = t; if (t > hi) hi = t; }
+      if (moved(a.s, b.s, i) && red(a.s, i)) ns++; }
+    const len = nf ? (hi - lo) / dpr : 0;
+    return { final: nf, scene: ns, kept: ns ? +(nf / ns).toFixed(3) : null, len: +len.toFixed(1), wide: len > 0 ? +(nf / dpr / dpr / len).toFixed(2) : 0, W, H, dpr,
+      draw: B.S.draw ? { t0: +B.S.draw.t0.toFixed(3), t1: +B.S.draw.t1.toFixed(3), mode: B.S.draw.mode } : null, mesh: +B.line.scale.x.toFixed(3) }; }
+  // the plane through points: the least eigenvector of their covariance (Jacobi's rotations on the symmetric 3x3), and how far they stray
+  function planeFit(P) {
+    const c = P.reduce((a, p) => a.add(p), new T.Vector3()).divideScalar(P.length), A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    for (const p of P) { const d = [p.x - c.x, p.y - c.y, p.z - c.z]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) A[i][j] += d[i] * d[j]; }
+    for (let s = 0; s < 40; s++) for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) { if (Math.abs(A[p][q]) < 1e-14) continue;
+      const th = 0.5 * Math.atan2(2 * A[p][q], A[q][q] - A[p][p]), cs = Math.cos(th), sn = Math.sin(th);
+      for (let k = 0; k < 3; k++) { const a = A[k][p], b = A[k][q]; A[k][p] = cs * a - sn * b; A[k][q] = sn * a + cs * b; }
+      for (let k = 0; k < 3; k++) { const a = A[p][k], b = A[q][k]; A[p][k] = cs * a - sn * b; A[q][k] = sn * a + cs * b; }
+      for (let k = 0; k < 3; k++) { const a = V[k][p], b = V[k][q]; V[k][p] = cs * a - sn * b; V[k][q] = sn * a + cs * b; } }
+    let m = 0; for (let i = 1; i < 3; i++) if (A[i][i] < A[m][m]) m = i;
+    const n = new T.Vector3(V[0][m], V[1][m], V[2][m]).normalize();
+    return { n, rms: Math.sqrt(P.reduce((s, p) => s + n.dot(p.clone().sub(c)) ** 2, 0) / P.length) }; }
+  window.__CW = { frame, touch, linePixels, planeFit }; })()`;
+
+{
+  // ── the phone, upright and turned: the line as it is drawn (C7, C9); --only Cline runs this page alone ──
+  if (want('C') || want('Cline')) for (const [w, h] of [[390, 844], [844, 390]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: engine === 'chromium', hasTouch: true, deviceScaleFactor: 2 });
+    await ctx.addInitScript(() => { window.__MOSA_DEVICE = { mobile: true, touch: true }; });
+    const page = await ctx.newPage(); const errors = []; page.on('pageerror', (e) => errors.push(String(e.message || e)));
+    await page.goto(url + 'index.html?test' + (plant ? '&plant=' + plant : ''));
+    await page.waitForFunction(() => window.__MOSA_BOOT && window.__MOSA_BOOT.ok === true, null, { timeout: 60000 }); await page.waitForTimeout(900);
+    await page.evaluate(BW); await page.evaluate(CW);
+    const m = await page.evaluate(async () => {
+      const { G, B, wait, raf, stage } = window.__BW, { touch, linePixels } = window.__CW;
+      await stage(0); B.open(G.me); await wait(650);                     // the paper's flash has settled into the ink (~0.45 s)
+      const x0 = innerWidth * 0.62, y0 = innerHeight * 0.36, x1 = innerWidth * 0.9, y1 = innerHeight * 0.52, N = 8;
+      touch('touchstart', x0, y0);
+      for (let k = 1; k <= N / 2; k++) { touch('touchmove', x0 + (x1 - x0) * k / N, y0 + (y1 - y0) * k / N); await raf(); }
+      await raf(); const half = await linePixels();
+      for (let k = N / 2 + 1; k <= N; k++) { touch('touchmove', x0 + (x1 - x0) * k / N, y0 + (y1 - y0) * k / N); await raf(); }
+      await raf(); const end = await linePixels();
+      touch('touchend', x1, y1); await wait(400); B.close(); await wait(300);
+      return { half, end };
+    });
+    const e = m.end, hv = m.half, ratio = e.len > 0 ? hv.len / e.len : null;
+    // the verdict is the final picture's; the scene alone is said beside it (it names the pass if one ever eats the line), never judged:
+    // the grade keeps crimson that the scene alone blends below the crimson test, so its count can fall to a pixel while the line reads
+    wall(`C7 the line seen, ${w}×${h}`, !errors.length && e.wide >= C7_WIDE,
+      `the stroke's own crimson: ${e.final} px in the final picture over ${e.len} CSS px of its length, ${e.wide} CSS px across on average (≥ ${C7_WIDE}); the scene alone drew ${e.scene} px of clear crimson${e.kept === null ? '' : ' (the final holds ' + Math.round(100 * e.kept) + ' % of it)'}`);
+    if (w < h) wall('C9 drawn as drawn', !errors.length && ratio !== null && Math.abs(ratio - 0.5) <= 0.15,
+      `halfway through the drag the line is ${hv.len} CSS px long, at its end ${e.len}: ${ratio === null ? 'NO LINE' : ratio.toFixed(2)} of it (0.5 ± 0.15) [drawn t0..t1 m: half ${JSON.stringify(hv.draw)} mesh ${hv.mesh} · end ${JSON.stringify(e.draw)} mesh ${e.mesh}]`);
+    if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
+    await ctx.close();
+  }
+  // ── the body aligns: each of the four cuts, the REAL blade's plane through its contact against the plane it was drawn on (C4); --only
+  // Calign runs this page alone ──
+  if (want('C') || want('Calign')) {
+    const { page, errors } = await open('test');
+    await page.evaluate(BW); await page.evaluate(CW);
+    // a calibration, printed (not a wall): for drawn lines every 15°, the turn each authored cut would need to lay its blade's plane at contact
+    // onto the drawn plane, he turned as a strike turns him (the clip's contact point on the target): which clip should each angle play?
+    const cal = await page.evaluate(async () => {
+      const { G, T, B, wait, raf, stage, center } = window.__BW, Y = new T.Vector3(0, 1, 0), rows = [];
+      const clips = ['Sword_Attack', 'Sword_Regular_A', 'Sword_Regular_B', 'Sword_Regular_C', 'Sword_Regular_Combo', 'Sword_Heavy_Combo', 'Sword_Dash', 'two-handed-horizontal-swing', 'two-handed-overhead-slam'];
+      const mat = await stage(0); B.open(G.me); await wait(500);
+      for (let deg = -90; deg < 90; deg += 15) {
+        B.S.theta = deg * Math.PI / 180; await raf(); await raf();
+        const nd = B.S.n.clone(), c = center(mat), p = G.me.pos;
+        const need = clips.map((k) => { const C = G.contactOf(k), f = Math.atan2(c.x - p.x, c.z - p.z) - Math.atan2(C.off, C.reach), n = G.align.planeOf(k).applyAxisAngle(Y, f);
+          return [k, +(Math.acos(Math.min(1, Math.abs(n.dot(nd)))) * 57.3).toFixed(0)]; }).sort((x, y) => x[1] - y[1]);
+        rows.push(`${deg}° (${B.cutOf(B.S.theta).id} → ${B.cutOf(B.S.theta).clip}): ` + need.slice(0, 4).map((x) => `${x[0]} ${x[1]}°`).join(', '));
+      }
+      B.close(); await wait(600); return rows;
+    });
+    console.log('  C4 calibration — the turn each clip needs, by the drawn angle:\n    ' + cal.join('\n    '));
+    const r = await page.evaluate(async () => {
+      const { G, T, B, wait, raf, stage } = window.__BW, { planeFit } = window.__CW, sw = G.ronin.sword.userData, out = [];
+      for (const [i, theta] of [[0, 0.1], [1, 0.8], [2, -0.8], [3, 1.45]]) {   // level, kesa '/', gyaku-kesa '\', vertical (cutOf)
+        await stage(i); B.open(G.me); await wait(500); B.S.theta = theta; await raf(); await raf();
+        const n0 = B.events.length, smp = []; B.release(G.me); const st = B.S.swing;
+        // one sample per POSE: the hit-stop holds the clip at contact, and a fit of one pose repeated is no plane (the first reading of the
+        // slam was 0° at 0 cm: one blade, five times)
+        for (let k = 0; k < 150 && st; k++) { await raf(); if (smp.length && Math.abs(smp[smp.length - 1].t - st.a.time) < 1e-4) continue;
+          smp.push({ t: st.a.time, h: sw.base.getWorldPosition(new T.Vector3()), p: sw.tip.getWorldPosition(new T.Vector3()), w: B.align ? B.align.S.carry : null });
+          const c = B.events.slice(n0).find((e) => e.kind === 'contact'); if (c && st.a.time > c.clipTime + 0.1) break; }
+        const c = B.events.slice(n0).find((e) => e.kind === 'contact'), A = B.align ? B.align.S : null;
+        // the window is round the clip's OWN contact (its measured frame, clipdata.json), never the frame the contact happened to be found on:
+        // that moment moves with the frame clock (the level cut read 19.7°, 7.8° and 13.3° on three runs of one tree)
+        let fit = null; if (c) { let win = 2 / 60, use = []; while ((use = smp.filter((s) => Math.abs(s.t - c.contactT) <= win + 1e-4)).length < 3 && win < 5 / 60) win += 1 / 60;
+          const P = []; for (const s of use) for (let j = 0; j <= 4; j++) P.push(s.h.clone().lerp(s.p, j / 4));
+          if (use.length >= 3) { const f = planeFit(P), n = c.shown.n; fit = { off: +(Math.acos(Math.min(1, Math.abs(f.n.dot(n)))) * 57.3).toFixed(1), rms: +(100 * f.rms).toFixed(1), pts: use.length, win: +(win * 60).toFixed(0), carry: use.map((s) => (s.w === null ? '-' : s.w.toFixed(2))).join('/') }; } }
+        const al = c && c.align; out.push({ cut: c ? c.swing : st && st.cut.id, fit, need: A ? +(A.need * 57.3).toFixed(1) : null, got: A ? +(A.got * 57.3).toFixed(1) : null, early: c ? +(c.clipTime - c.contactT).toFixed(3) : null,
+          arm: al && al.wantMove !== undefined ? `hand asked ${(100 * al.wantMove).toFixed(0)} cm, gave ${(100 * al.moved).toFixed(0)}, short ${(100 * (al.miss || 0)).toFixed(1)}; wrist asked ${(al.wantTurn * 57.3).toFixed(0)}°, gave ${(al.turned * 57.3).toFixed(0)}°` : '' });
+        B.close(); await wait(700); }
+      return out;
+    });
+    const worst = Math.max(...r.map((x) => (x.fit ? x.fit.off : 99)));
+    wall('C4 aligned', !errors.length && r.length === 4 && worst <= 12, r.map((x) => `${x.cut}: ${x.fit ? `the blade's plane ${x.fit.off}° off the drawn one (${x.fit.rms} cm rms over ${x.fit.pts} poses within ±${x.fit.win} frames; carry ${x.fit.carry})` : 'NO CONTACT or < 3 poses'}${x.need !== null ? `, the turn ${x.got}° of ${x.need}°` : ''}, contact ${x.early} s from the clip's${x.arm ? ' (' + x.arm + ')' : ''}`).join(' · ') + ` — worst ${worst}° (≤ 12)`);
+    if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
+    await page.close();
+  }
+}
+
 await browser.close(); server.close();
 const red = results.filter((x) => !x.ok).length;
 console.log(red ? `\n✖ ${red} wall(s) red (${engine}${plant ? ', plant ' + plant : ''})` : `\n✔ every wall holds (${engine})`);
