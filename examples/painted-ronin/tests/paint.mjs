@@ -106,7 +106,7 @@ await page.evaluate(() => {
     uses('rocks', patched(rocks.material)); uses('ground', patched(ground.material));
     const flags = G.env.camps.flatMap((c) => c.group.userData.flags); flags.forEach((f, i) => uses('banner' + i, patched(f.material)));
     // 筆 the brush (blade.js): its sheet, its line, the bits a cut throws, and every cuttable and stand, all from the one atlas
-    const BM = G.brush.materials; uses('brush.sheet', G.brush.sheet.material.uniforms.paintAtlas.value === atlas); uses('brush.line', G.brush.line.material.map.source === atlas.source);
+    const BM = G.brush.materials; uses('brush.sheet', G.brush.sheet.material.uniforms.paintAtlas.value === atlas); { const lm = G.brush.line.material, lt = lm.map || (lm.uniforms && lm.uniforms.map && lm.uniforms.map.value); uses('brush.line', !!lt && lt.source === atlas.source); }   // the line samples it as a map or, since part 2's shader, as its uniform
     uses('brush.bits', G.brush.bits && G.scene.getObjectByName('brush-bits').material.uniforms.paintAtlas.value === atlas);
     for (const k of ['strawOut', 'strawIn', 'stalkOut', 'stalkIn', 'stand', 'base']) uses('brush.' + k, patched(BM[k]));
     // L2: the lit painted bodies take THE ramp
@@ -133,7 +133,7 @@ await page.evaluate(() => {
     arcs.forEach((a, i) => { for (const k of ['paperC', 'crimsonC', 'inkC']) add('slash' + i + '.' + k, U(a.m.material, k)); });
     add('dash', st.m.material.color); add('trail', U(G.vfx.trail.material, 'paperC'));
     for (const k of ['strawOut', 'strawIn', 'stalkOut', 'stalkIn', 'stand', 'base']) { add('brush.' + k, BM[k].color); for (const [n, c] of Object.entries(BM[k].userData.swatches || {})) add('brush.' + k + '.' + n, c); }
-    add('brush.sheet', U(G.brush.sheet.material, 'paperC')); add('brush.line', G.brush.line.material.color); add('brush.cutline', G.brush.lineU.bmC.value);
+    add('brush.sheet', U(G.brush.sheet.material, 'paperC')); add('brush.line', G.brush.line.material.color || G.brush.line.material.uniforms.color.value); add('brush.cutline', G.brush.lineU.bmC.value);
     { const bm = G.scene.getObjectByName('brush-bits').material; for (const k of ['aC', 'bC', 'cC']) add('brush.bits.' + k, U(bm, k)); }
     // the splash's tones (round 2, 8-9 Nov: ink, the dry-brush mid tone, its bleed, crimson and maple flicks) and the drops' and stains' tones
     for (const k of ['inkC', 'midC', 'washC', 'crimsonC', 'mapleC']) add('blot.' + k, U(G.vfx.blot.material, k));
