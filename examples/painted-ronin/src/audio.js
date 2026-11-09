@@ -14,7 +14,15 @@ const SFX = {
   roll: [0.45, 0.05, 120, 0.02, 0.08, 0.2, 4, 0.5, -3, 0, 0, 0, 0, 3, 0, 0, 0, 0.4, 0.06, 0, 700],
   fall: [0.9, 0.1, 55, 0, 0.05, 0.4, 3, 1.2, -1, 0, 0, 0, 0, 1.4, 0, 0.1, 0, 0.6, 0.1],
   alert: [0.5, 0, 520, 0.02, 0.12, 0.2, 1, 1.2, 0, 0, 120, 0.06, 0, 0, 0, 0, 0, 0.6, 0.05],
+  // 筆 the brush (blade.js): a breath drawn as time holds, the dry shear of straw, green bamboo's hollow knock, the breath let out
+  breath: [0.35, 0, 200, 0.25, 0.05, 0.3, 4, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0.4, 0.1, 0, -900],
+  straw: [0.6, 0.05, 1500, 0, 0.02, 0.1, 4, 1.2, 0, 0, 0, 0, 0, 1, 0, 0.1, 0, 0.5, 0.03, 0, 2400],
+  knock: [0.75, 0.05, 420, 0, 0.01, 0.16, 0, 1.6, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0.3, 0.04],
+  exhale: [0.3, 0, 160, 0.06, 0.08, 0.5, 4, 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0.35, 0.2, 0, -700],
 };
+// the held moment hushes the valley (0..1): the wind falls away and the koto waits; the cut itself stays crisp (ZzFX plays on its own)
+let hush = 0;
+export function setHush(k) { hush = k; }
 export function play(name, vol = 1) { if (!started || !SFX[name]) return; const p = SFX[name].slice(); p[0] *= vol; zzfx(...p); }
 
 function noiseBuffer(sec) { const b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0); let last = 0; for (let i = 0; i < d.length; i++) { last = 0.97 * last + 0.03 * (Math.random() * 2 - 1); d[i] = last * 6; } return b; }
@@ -41,10 +49,10 @@ export function startAudio() {
 export function updateAudio(dt, { speed = 0, danger = 0 } = {}) {
   if (!started) return;
   const t = ctx.currentTime, gust = 0.5 + 0.5 * Math.sin(t * 0.21) * Math.sin(t * 0.077 + 1.3);
-  wind.g.gain.setTargetAtTime(0.03 + 0.05 * gust + 0.02 * Math.min(1, speed / 7), t, 0.4);
+  wind.g.gain.setTargetAtTime((0.03 + 0.05 * gust + 0.02 * Math.min(1, speed / 7)) * (1 - 0.75 * hush), t, hush > 0 ? 0.08 : 0.4);
   wind.lp.frequency.setTargetAtTime(300 + 400 * gust, t, 0.5);
   nextNote -= dt;
-  if (nextNote <= 0 && danger < 0.5) {
+  if (nextNote <= 0 && danger < 0.5 && hush < 0.5) {
     nextNote = 2.5 + Math.random() * 5;
     const k = Math.floor(Math.random() * IN_SCALE.length), s = ctx.createBufferSource(), g = ctx.createGain();
     s.buffer = plucks[k]; g.gain.value = 0.09 + Math.random() * 0.05; s.connect(g); g.connect(master); s.start();

@@ -76,17 +76,20 @@ export function addPatch(material, name, fn) {
 // A PAINTED SURFACE: oil strokes laid on a lit body in the world (the atlas field, triplanar), the body's colour lifted and sunk by the
 // bristles, and — on a toon material — the light's band edge moved by the same bristles (the cheap form of Bolt's "painterly normals":
 // research I §4), so the terminator is a brush edge, never a line.
-export function paintSurface(material, { region = 'field_a', scale = 0.55, strength = 0.42, band = 0.32 } = {}) {
+// space 'object': the strokes ride the body's own frame, for a body that moves (a cut piece falling): strokes laid in the world would
+// swim over it (Meier's shower door; SKILL §3 "never world-space strokes on a body that moves")
+export function paintSurface(material, { region = 'field_a', scale = 0.55, strength = 0.42, band = 0.32, space = 'world' } = {}) {
   const U = { paintRect: { value: rect(region) }, paintScale: { value: scale }, paintStrength: { value: strength }, paintBand: { value: band } };
   material.userData.paintRegion = region;
-  return addPatch(material, 'surface:' + region, (shader) => {
+  const own = space === 'object';
+  return addPatch(material, 'surface:' + region + (own ? ':object' : ''), (shader) => {
     Object.assign(shader.uniforms, atlasUniforms(), U);
     shader.vertexShader = 'varying vec3 vPaintPos; varying vec3 vPaintN;\n' + shader.vertexShader.replace('#include <project_vertex>', `{
       vec4 pw = vec4(transformed, 1.0); vec3 pn = objectNormal;
       #ifdef USE_INSTANCING
         pw = instanceMatrix * pw; pn = mat3(instanceMatrix) * pn;
       #endif
-      vPaintPos = (modelMatrix * pw).xyz; vPaintN = normalize(mat3(modelMatrix) * pn);
+      ${own ? 'vPaintPos = pw.xyz; vPaintN = normalize(pn);' : 'vPaintPos = (modelMatrix * pw).xyz; vPaintN = normalize(mat3(modelMatrix) * pn);'}
     }
     #include <project_vertex>`);
     shader.fragmentShader = 'uniform vec4 paintRect; uniform float paintScale; uniform float paintStrength; uniform float paintBand;\n' +

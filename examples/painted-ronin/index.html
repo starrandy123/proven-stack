@@ -10,6 +10,7 @@
   "fastnoise-lite": "./vendor/fastnoise/FastNoiseLite.js",
   "howler": "./vendor/howler/howler.min.js",
   "jolt-physics": "./vendor/jolt/jolt-physics.wasm-compat.js",
+  "three-pinata": "./vendor/pinata/three-pinata.es.js",
   "postprocessing": "./vendor/postprocessing/index.js",
   "three.quarks": "./vendor/quarks/three.quarks.esm.js",
   "quarks.core": "./vendor/quarks/quarks.core.esm.js",
@@ -30,9 +31,10 @@
 <div id="hud">
   <div id="hp"><div id="hp-fill"></div></div>
   <div id="ki"><div id="ki-fill"></div></div>
+  <div id="ink" title="筆 the brush: its ink"><i></i><i></i><i></i></div>
   <div id="kills">斬 0</div>
   <div id="msg"></div>
-  <div id="help">WASD move · Shift run · click to lock the mouse, then click to strike · right-click to roll · Space jump · Q 閃 dash cut (half ki) · E 嵐 storm (full ki)</div>
+  <div id="help">WASD move · Shift run · click to lock the mouse, then click to strike · right-click to roll · Space jump · Q 閃 dash cut (half ki) · E 嵐 storm (full ki) · hold R 筆 the brush: drag and let go to cut</div>
 </div>
 <div id="hurt-flash"></div>
 <script type="module" src="src/main.js"></script>

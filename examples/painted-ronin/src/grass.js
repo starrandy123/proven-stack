@@ -134,6 +134,7 @@ export function createGrass(scene, land, N, SPACING, { phone = false, sunDir, fo
   // the ground map: R = height, G = grass density (0 on steep slopes, at camps, shrine and spawn, on paths)
   const data = new Float32Array(N * N * 2), half = (N - 1) * SPACING / 2, n = new THREE.Vector3();
   const clear = [land.spots.spawn, land.spots.shrine, ...land.spots.camps].map((p, i) => ({ p, r: i === 0 ? 5 : 14 }));
+  if (land.spots.tameshi) clear.push({ p: land.spots.tameshi, r: 5.5 });   // 筆 the brush's cutting ground (blade.js): a yard, its targets seen whole
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const x = -half + i * SPACING, z = -half + j * SPACING, k = j * N + i;
     land.normal(x, z, n);

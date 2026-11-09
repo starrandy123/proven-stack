@@ -1,7 +1,7 @@
 {
  "schema": "mosa.rights.v1",
- "searched": "The files: every vendored library (vendor/*/LICENSE.txt, each npm release sha512-checked) and every asset folder (assets/quaternius from the packs' own License.txt, assets/polypizza from each model's Poly Pizza page). The web: each asset's page read 7 Nov 2026; the title \"Painted Ronin\" searched for an existing game of that name. The kasa, the katana, the scabbard, the rocks, the banners, the leaves and every sound are made in code here. 8 Nov 2026: the painted look's sources read at source (research H and I in the receipts): mypaint/mypaint-brushes' Licenses.dep5 (brushes/* CC0-1.0), libmypaint's COPYING (ISC), stegu/webgl-noise's LICENSE (MIT).",
- "mine": "The game: its code (src/), its land, its rules, its look (the painterly pass is ported from Maxime Heckel's MIT code, credited in src/painterly.js; the painted sky, clouds, birds and strokes are written here to published methods — Sea of Thieves' cloud talk, Valve's TF2 shading paper, Meier's painterly rendering, the ukiyo-e bokashi — credited in each file), the kasa, katana, scabbard, rocks and banners, its sounds (ZzFX numbers, Karplus-Strong koto) and its name, made for this game with Claude Code and proven-stack.",
+ "searched": "The files: every vendored library (vendor/*/LICENSE.txt, each npm release sha512-checked) and every asset folder (assets/quaternius from the packs' own License.txt, assets/polypizza from each model's Poly Pizza page). The web: each asset's page read 7 Nov 2026; the title \"Painted Ronin\" searched for an existing game of that name. The kasa, the katana, the scabbard, the rocks, the banners, the leaves and every sound are made in code here. 8 Nov 2026: the painted look's sources read at source (research H and I in the receipts): mypaint/mypaint-brushes' Licenses.dep5 (brushes/* CC0-1.0), libmypaint's COPYING (ISC), stegu/webgl-noise's LICENSE (MIT). 9 Nov 2026: the brush's sources read at source (research K in the receipts): three-pinata's npm release and its LICENSE (MIT; the GitHub repository has none, its README says MIT), PlatinumGames' blog and the Siliconera interview on Blade Mode, Toyama-ryu's tameshigiri pages, Wikipedia on tameshigiri and bamboo.",
+ "mine": "The game: its code (src/), its land, its rules, its look (the painterly pass is ported from Maxime Heckel's MIT code, credited in src/painterly.js; the painted sky, clouds, birds and strokes are written here to published methods — Sea of Thieves' cloud talk, Valve's TF2 shading paper, Meier's painterly rendering, the ukiyo-e bokashi — credited in each file), the kasa, katana, scabbard, rocks and banners, its sounds (ZzFX numbers, Karplus-Strong koto) and its name, made for this game with Claude Code and proven-stack. 筆 the brush (src/blade.js, 9 Nov 2026): its held moment, the cut the player draws, the straw mats, the green stalks and their stands, the painted cut faces, the ink-wash grade and the painter's focus are written here, after Metal Gear Rising's Blade Mode (the mechanic only, from its makers' published words) and Ōkami's brush (the mechanic only); no name, art, sound or code of either game is used; the cutting is three-pinata's (MIT, vendor/pinata/).",
  "others": [
   {
    "what": "Universal Base Characters (the head, eyes and brows), Modular Character Outfits - Fantasy (Male_Peasant, recoloured indigo: the ronin; Male_Ranger: the bandits), Universal Animation Library 1 and 2 (21 clips) — made phone-sized by tools/build_assets.mjs",
@@ -44,6 +44,12 @@
    "by": "Jorrit Rouwe",
    "license": "MIT",
    "from": "vendor/jolt/ (https://github.com/jrouwe/JoltPhysics)"
+  },
+  {
+   "what": "three-pinata (@dgreenheck/three-pinata@2.0.1)",
+   "by": "Daniel Greenheck",
+   "license": "MIT",
+   "from": "vendor/pinata/ (npm, sha512-checked; licence in vendor/pinata/LICENSE.txt; home https://github.com/dgreenheck/three-pinata); the MIT licence is the LICENSE file inside the npm release (Copyright (c) 2023 Daniel Greenheck); the GitHub repository has no LICENSE file, and its README says \"This project is licensed under the MIT License.\""
   },
   {
    "what": "postprocessing (pmndrs) (postprocessing@6.39.6)",

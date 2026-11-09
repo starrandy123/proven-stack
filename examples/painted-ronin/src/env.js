@@ -163,7 +163,7 @@ export async function buildEnvironment(scene, land, P, { plant = null } = {}) {
     const l = toro.scene.clone(); l.scale.setScalar(3); l.position.set(3, land.groundY(c.x + 3, c.y) - y, 0); group.add(l);
     return { center: new THREE.Vector3(c.x, y, c.y), group };
   });
-  return { camps, obstacles, shrine: { pos: new THREE.Vector3(sx, sy, sz), face } };
+  return { camps, obstacles, shrine: { pos: new THREE.Vector3(sx, sy, sz), face }, props: { toro: toro.scene } };   // props: the loaded models others may clone (blade.js)
 }
 
 // the obstacle shapes Recast reads for a camp's navmesh (trunks, rocks, poles), as plain meshes

@@ -1,0 +1,28 @@
+{
+  "id": "pinata",
+  "title": "three-pinata",
+  "license": "MIT",
+  "by": "Daniel Greenheck",
+  "home": "https://github.com/dgreenheck/three-pinata",
+  "contains": [],
+  "packages": [
+    {
+      "name": "@dgreenheck/three-pinata",
+      "version": "2.0.1",
+      "integrity": "sha512-1pQU68B5xguxvRryl6nxZBARDqOW+/lXf7Xpz8QZ87awadSpN85mDNChTEdA4fPfJYyrft+thHS6Ooe7E5rdFA=="
+    }
+  ],
+  "files": {
+    "three-pinata.es.js": {
+      "bytes": 63102,
+      "sha256": "6b2c0cfbc2fd926ebd6eb80997c1f034eecebac851e0057ee6d3c433be946378",
+      "from": "@dgreenheck/three-pinata@2.0.1"
+    },
+    "LICENSE.txt": {
+      "bytes": 1073,
+      "sha256": "9d613c8ac1452f5414fa49844024e4db41340a41aacd3a3903508bfc593e771c",
+      "from": "@dgreenheck/three-pinata@2.0.1"
+    }
+  },
+  "license_note": "the MIT licence is the LICENSE file inside the npm release (Copyright (c) 2023 Daniel Greenheck); the GitHub repository has no LICENSE file, and its README says \"This project is licensed under the MIT License.\""
+}

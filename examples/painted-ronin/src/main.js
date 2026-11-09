@@ -15,7 +15,8 @@ import { buildEnvironment, obstacleMeshes } from './env.js';
 import { createNavigation, terrainPatch } from './navigation.js';
 import { Bandits } from './enemies.js';
 import { createVfx } from './vfx.js';
-import { startAudio, updateAudio, play as sfx } from './audio.js';
+import { startAudio, updateAudio, play as sfx, setHush } from './audio.js';
+import { createBrush } from './blade.js';
 import { createBirds, createClouds, swayLeaves } from './life.js';
 import { loadPaint, paint, paintFogAll, paintSurface, measureHorizon, paintMemoryMB, PALETTE, RAMP, WIND } from './paint.js';
 import { paintSky } from './sky_painted.js';
@@ -62,6 +63,9 @@ sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6; scene.add(sun, sun.targe
 
 loading('shaping the valley');
 const land = makeLand();
+// 筆 the brush's cutting ground (blade.js): a named place 7.5 m into the first view from where he wakes (the follow camera's first yaw is
+// 0.85π); a name in `spots` moves no draw of the props, and the grass leaves it bare (grass.js)
+land.spots.tameshi = land.spots.spawn.clone().add(new THREE.Vector2(-Math.sin(Math.PI * 0.85), -Math.cos(Math.PI * 0.85)).multiplyScalar(7.5));
 scene.add(terrainMesh(land));
 const grass = createGrass(scene, land, N, SPACING, { phone: PHONE, sunDir, fog: scene.fog });
 
@@ -365,16 +369,28 @@ function specialUpdate(dt) {
   return { vx: 0, vz: 0 };
 }
 
-const input = createInput(root);
+const input = createInput(root, { plant: PLANT });
 for (const ev of ['pointerdown', 'keydown', 'touchstart']) addEventListener(ev, startAudio, { once: true });
 const cam = { yaw: Math.PI * 0.85, pitch: 0.28, dist: 6.0, target: new THREE.Vector3() };
+// 筆 THE BRUSH (blade.js; research K_blade_mode.md): a tameshigiri ground on the spawn's own flat, 7.5 m into the first view (a named
+// place: no new flat and no new draw in the props' placement, so nothing else in the valley moves), and the held moment that cuts it
+loading('setting out the straw (the brush)');
+const me = { get pos() { return pos; }, get facing() { return facing; }, set facing(v) { facing = v; }, setPos: (x, y, z) => player.setPosition(x, y, z),
+  get alive() { return pc.alive; }, get busy() { return !!(pc.strike || pc.special || pc.roll > 0 || pc.chiburi); } };
+const firstView = new THREE.Vector3(-Math.sin(cam.yaw), 0, -Math.cos(cam.yaw)), tameshi = new THREE.Vector3(land.spots.tameshi.x, 0, land.spots.tameshi.y);
+const brush = await createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx, painterly, contactOf, bandits, say, plant: PLANT, lantern: env.props && env.props.toro,
+  spot: tameshi, face: Math.atan2(firstView.x, firstView.z), hud: { pots: [...document.querySelectorAll('#ink i')] } });
 const STEP = 1 / 60;
 
 function frame(now) {
   const realDt = Math.min(0.1, (now - last) / 1000) * RATE; last = now;
   const inp = input.read();
+  // 筆 the brush reads its own input first (the button, the stroke, the steps round its focus); while it holds the moment, or its swing
+  // runs, the ronin's other actions wait. It holds the world's clock to 0.05 (brush.timeScale is exactly 1 when it is closed)
+  brush.frame(realDt, inp, me); input.setBrush(brush.active);
+  if (brush.holdsBody) { inp.mx = inp.my = 0; inp.run = false; inp.strike = inp.roll = inp.dash = inp.storm = inp.jump = false; }
   freeze = Math.max(0, freeze - realDt); slow = Math.max(0, slow - realDt);
-  const dt = freeze > 0 ? 0 : realDt * (slow > 0 ? 0.3 : 1);              // hit-stop holds the world; slow motion runs it at 0.3x; the camera stays real-time
+  const dt = freeze > 0 ? 0 : realDt * (slow > 0 ? 0.3 : 1) * brush.timeScale;   // hit-stop holds the world; slow motion runs it at 0.3x; the camera stays real-time
   // Sky.js's clock counts SECONDS (three.js's own example: performance.now() * 0.001); fed milliseconds (until 8 Nov) its cloud sheet
   // drifted and churned 1,000× too fast — the owner: "The clouds are moving way! Too fast!" (plant skyms)
   time += dt; paint.time.value += dt; skyPaint.update(PLANT === 'skyms' ? time * 1000 : time);
@@ -402,7 +418,7 @@ function frame(now) {
     }
   }
   // the chiburi: any input breaks it (and the held finishing pose); once he has stood CHIBURI.zanshin with a wet blade, the flick
-  const acting = inp.strike || inp.roll || inp.dash || inp.storm || inp.jump || Math.hypot(inp.mx, inp.my) > 0.3;
+  const acting = brush.holdsBody || inp.strike || inp.roll || inp.dash || inp.storm || inp.jump || Math.hypot(inp.mx, inp.my) > 0.3;
   if (acting || !pc.alive || pc.special || pc.roll > 0) hold = false;
   if (pc.chiburi && (acting || !pc.alive || pc.strike || pc.special || pc.roll > 0)) { pc.chiburi = null; if (ronin.oneShot === CHIBURI.clip) ronin.oneShot = null; }
   still = pc.alive && !pc.strike && !pc.special && pc.roll <= 0 && !acting ? still + dt : 0;
@@ -464,15 +480,20 @@ function frame(now) {
   const gScale = pc.special && pc.special.kind === 'dash' && pc.special.jump && pc.special.t < pc.special.dur + 0.2 ? pc.special.jump.g / 9.81 : 1;
   if (flight) player.setPosition(flight.x, flight.y, flight.z);            // carried through the air: the arc is the body's path
   const groundBefore = pos.clone();
-  while (acc >= STEP) { if (!flight) { player.step(STEP, vx, vz, jump, launch, gScale); if (launch) pc.special.jumped = true; launch = 0; jump = false; } P.jolt.Step(STEP, 1); acc -= STEP; }
+  // the brush's held moment steps the world by its own small dt each frame, so its slow motion is smooth (the 60 Hz accumulator would hold
+  // a falling piece still for twenty frames, then jump it)
+  if (brush.timeScale < 1 && dt > 0 && !flight) { player.step(dt, vx, vz, false, 0, gScale); P.jolt.Step(dt, 1); acc = 0; }
+  else while (acc >= STEP) { if (!flight) { player.step(STEP, vx, vz, jump, launch, gScale); if (launch) pc.special.jumped = true; launch = 0; jump = false; } P.jolt.Step(STEP, 1); acc -= STEP; }
   player.position(pos);
+  brush.sync(dt);
   if (pc.strike && !flight && pc.strike.t < pc.strike.impact) {           // the walls read how far a strike slid along the ground
     const lift = pos.y - land.groundY(pos.x, pos.z); if (lift < 0.15) pc.strike.groundSlide += Math.hypot(pos.x - groundBefore.x, pos.z - groundBefore.z);
   }
   if (pc.special && pc.special.kind === 'dash') pc.special.lift = Math.max(pc.special.lift || 0, pos.y - land.groundY(pos.x, pos.z));
   ronin.root.position.copy(pos); ronin.root.rotation.y = facing;
-  { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike && !pc.chiburi && !hold) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
-  ronin.update(dt);
+  { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike && !pc.chiburi && !hold && !brush.holdsBody) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
+  ronin.update(brush.selfClock ? brush.selfDt(realDt) : dt);              // in the brush his swing runs on the real clock: the world holds, he does not
+  brush.afterAnimate(me);
   if (pc.chiburi) {                                                       // the flick's drops, off the REAL tip, at the clip's own frames
     const ch = pc.chiburi, d = clipdata[CHIBURI.clip]; ch.t += dt;
     while (ch.next < CHIBURI.frames.length && ch.t * CHIBURI.speed >= CHIBURI.frames[ch.next] / 60) {
@@ -515,11 +536,15 @@ function frame(now) {
   bandits.update(dt, ronin, pos, pc.alive);
   vfx.trailUpdate(ronin.sword, !!pc.strike && pc.strike.t / pc.strike.dur > 0.15 && pc.strike.t / pc.strike.dur < 0.7);
   vfx.update(dt, pos, camera); vfx.strokeUpdate(realDt, camera); vfx.lockMark(PLANT === 'nolock' || !pc.alive ? null : lock.target, realDt);
-  birds.update(realDt, pos, bandits.list.some((b) => !b.dead && b.state !== 'idle' && b.state !== 'return') ? 1 : 0); clouds.update(realDt); sway.update(realDt);
+  const worldReal = realDt * brush.timeScale;                              // the valley's own life holds in the brush too (birds, clouds, leaves, grass)
+  birds.update(worldReal, pos, bandits.list.some((b) => !b.dead && b.state !== 'idle' && b.state !== 'return') ? 1 : 0); clouds.update(worldReal); sway.update(worldReal);
   for (const c of env.camps) { c.fire.light.intensity = 5 + Math.sin(time * 11) * 0.8 + Math.sin(time * 23) * 0.5; for (const f of c.group.userData.flags) f.rotation.y = f.userData.base + Math.sin(time * 1.7 + f.userData.wave) * 0.25; }
 
   // the camera: behind and above, never under the ground, shaken by trauma² (KidsCanCode's screen shake)
-  if (!cam.hold) cam.target.lerp(tmp.copy(pos).add(new THREE.Vector3(0, 1.5, 0)), 1 - Math.exp(-realDt * 10));   // cam.hold: a locked-off shot (filming)
+  if (!cam.hold) {                                                        // cam.hold: a locked-off shot (filming)
+    if (brush.framing) cam.target.lerp(brush.frameTarget(tmp), 1 - Math.exp(-realDt * 7));   // the brush frames him and its focus (and lingers on a cut)
+    else cam.target.lerp(tmp.copy(pos).add(new THREE.Vector3(0, 1.5, 0)), 1 - Math.exp(-realDt * 10));
+  }
   const off = new THREE.Vector3(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch)).multiplyScalar(cam.dist);
   camera.position.copy(cam.target).add(off);
   camera.position.y = Math.max(camera.position.y, land.groundY(camera.position.x, camera.position.z) + 0.6);
@@ -537,7 +562,8 @@ function frame(now) {
   if (sh > 0) { const k = now * 0.05; camera.position.add(new THREE.Vector3(Math.sin(k * 1.3) * 0.32 * sh, Math.sin(k * 1.7 + 2) * 0.24 * sh, 0)); camera.rotateZ(Math.sin(k * 1.1) * 0.05 * sh); }
 
   sun.position.copy(pos).addScaledVector(sunDir, 120); sun.target.position.copy(pos);
-  grass.update(realDt, camera, pos);
+  grass.update(worldReal, camera, pos);
+  setHush(brush.look);
   updateAudio(realDt, { speed: Math.hypot(vx, vz), danger: bandits.list.some((b) => !b.dead && b.state !== 'idle') ? 1 : 0 });
   hud.hp.style.width = Math.max(0, pc.hp) + '%'; hud.ki.style.width = pc.ki + '%'; document.body.classList.toggle('ki-50', pc.ki >= 50); document.body.classList.toggle('ki-100', pc.ki >= 100); document.body.classList.toggle('slowmo', slow > 0); hud.kills.textContent = `斬 ${pc.kills} / ${TOTAL}`;
   if (clouds.render) { camera.updateMatrixWorld(); clouds.render(renderer, camera); }        // the clouds' mass into its buffer, before the frame
@@ -568,5 +594,6 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); co
   const s = renderer.getDrawingBufferSize(new THREE.Vector2()); skyPaint.setResolution(s.x, s.y); if (clouds.setSize) clouds.setSize(s.x, s.y); inkCell(); });
 window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, LEAP_STRIKE, lock, LOCK_RANGE, birds, clouds, sky, skyPaint, paint, PALETTE, RAMP, WIND, sunDir,
   get facing() { return facing; }, set facing(v) { facing = v; },
-  CHIBURI, tipTravel, GRID: { N, SPACING }, get blood() { return blood; }, get still() { return still; }, get hold() { return hold; }, get time() { return time; } };
+  CHIBURI, tipTravel, GRID: { N, SPACING }, get blood() { return blood; }, get still() { return still; }, get hold() { return hold; }, get time() { return time; },
+  brush, input, me, contactOf };
 requestAnimationFrame(frame);

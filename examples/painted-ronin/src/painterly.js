@@ -7,6 +7,7 @@
 // fraction of the screen's resolution, and the paper is a canvas weave made in code (his watercolour image is not ours to ship).
 import * as THREE from 'three';
 import { Pass } from 'postprocessing';
+import { col } from './paint.js';
 
 const VERT = `varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 1.0, 1.0); }`;
 
@@ -36,6 +37,7 @@ void main() { vec4 s = texture2D(inputBuffer, vUv) * 0.2270270270;
 const KUWAHARA = `#define SECTOR_COUNT 8
 uniform sampler2D tensorBuffer; uniform sampler2D originalTexture; uniform sampler2D depthBuffer; uniform vec4 resolution;
 uniform float radiusNear; uniform float radiusFar; uniform float cameraNear; uniform float cameraFar; uniform float useDepth;
+uniform float focusDepth; uniform float focusAmt;
 varying vec2 vUv;
 vec3 sampleColor(vec2 offset) { return texture2D(originalTexture, vUv + offset * resolution.zw).rgb; }
 vec4 getDominantOrientation(vec4 st) {
@@ -64,7 +66,13 @@ void main() {
   float anis = (o.z - o.w) / (o.z + o.w + 1e-6); float alpha = 25.0;
   mat2 A = mat2(o.x, -o.y, o.y, o.x) * mat2(alpha / (anis + alpha), 0.0, 0.0, (anis + alpha) / alpha);
   float radius = radiusFar;
-  if (useDepth > 0.5) radius = mix(radiusNear, radiusFar, smoothstep(4.0, 45.0, linearDepth(texture2D(depthBuffer, vUv).r)));
+  if (useDepth > 0.5) {
+    float dl = linearDepth(texture2D(depthBuffer, vUv).r);
+    radius = mix(radiusNear, radiusFar, smoothstep(4.0, 45.0, dl));
+    // 筆 the brush (blade.js): a painter's depth of field, not a lens's: the brush fine at the focus's depth and broad away from it
+    // (Gurney, 2021: "suggest depth on the Z-axis by selecting where to put detail"; research K §5)
+    if (focusAmt > 0.0) radius = mix(radius, mix(1.5, 7.0, smoothstep(0.4, 4.5, abs(dl - focusDepth))), focusAmt);
+  }
   vec3 best = texture2D(originalTexture, vUv).rgb; float bestVar = 1e9;
   for (int i = 0; i < SECTOR_COUNT; i++) {
     vec3 c; float v; sector(A, float(i) * 6.28318 / float(SECTOR_COUNT), radius, c, v);
@@ -76,6 +84,7 @@ void main() {
 // Heckel's FinalFragmentShader (quantised tone toward dark and light, saturation, ACES) with our canvas weave for the paper,
 // tuned gentler for a lit 3D world (his quantisation of 16 steps and saturation 1.5 were tuned for a single object on white)
 const FINAL = `uniform sampler2D inputBuffer; uniform sampler2D sceneBuffer; uniform vec4 resolution; uniform float time; uniform float strength; varying vec2 vUv;
+uniform float wash; uniform float flash; uniform vec3 washInk; uniform vec3 washPaper;
 vec3 ACESFilm(vec3 x) { float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
 vec3 sat(vec3 rgb, float k) { vec3 i = vec3(dot(rgb, vec3(0.2125, 0.7154, 0.0721))); return mix(i, rgb, k); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -97,8 +106,25 @@ void main() {
   color = mix(color, q, 0.35 * strength);
   color = sat(color, mix(1.0, 1.25, strength));
   color = ACESFilm(color * 1.22);
+  // 筆 THE BRUSH'S HELD MOMENT (blade.js; research K §5): the world becomes an ink painting. Its values fall to five shades of one ink on
+  // the paper ("Sumi has five shades", sumi ni gosai ari), each step's edge wandering like a wet wash, with a grain of its own (Kurosawa
+  // Mode: "A film grain ties the entire mode together"). What is crimson stays crimson: the cut's line, a wound, the lock's enso.
+  if (wash > 0.0) {
+    // the values lifted toward the paper (an ink painting is mostly paper: its darks are accents), each step a soft wet border that
+    // wanders slowly; take 1's hard steps with a busy noise read as a threshold filter (black blotches in the sky)
+    float L = pow(clamp(dot(color, vec3(0.299, 0.587, 0.114)), 0.0, 1.0), 0.72);
+    float x = L * 4.0 + (noise(gl_FragCoord.xy * 0.022) - 0.5) * 0.32;
+    float k = clamp((floor(x) + smoothstep(0.32, 0.68, fract(x))) / 4.0, 0.0, 1.0);
+    vec3 sumi = mix(washInk, washPaper, k);
+    float mx = max(color.r, max(color.g, color.b)), mn = min(color.r, min(color.g, color.b)), ch = mx - mn;
+    float hue = (mx == color.r && ch > 1e-4) ? (color.g - color.b) / ch / 6.0 : 0.5;
+    float red = smoothstep(0.3, 0.5, ch / max(mx, 1e-4)) * (1.0 - smoothstep(0.03, 0.05, abs(hue)));
+    color = mix(color, mix(sumi, color, red), wash);
+    color += (hash(gl_FragCoord.xy + fract(time * 7.13) * 91.0) - 0.5) * 0.05 * wash;
+    color = mix(color, washPaper, flash);                                       // the opening's flash of bare paper
+  }
   color *= mix(1.0, canvas(gl_FragCoord.xy), strength);
-  float vig = smoothstep(1.25, 0.45, length(vUv - 0.5) * 1.45); color *= mix(0.82, 1.0, vig);
+  float vig = smoothstep(1.25, 0.45, length(vUv - 0.5) * 1.45); color *= mix(0.82 - 0.22 * wash, 1.0, vig);
   gl_FragColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
 }`;
 
@@ -116,9 +142,13 @@ export class PainterlyPass extends Pass {
     this.blurMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: BLUR, uniforms: { inputBuffer: { value: null }, dir: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
     this.kuwaharaMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: KUWAHARA, depthTest: false, depthWrite: false, uniforms: {
       tensorBuffer: { value: null }, originalTexture: { value: null }, depthBuffer: { value: null }, resolution: { value: new THREE.Vector4() },
-      radiusNear: { value: radiusNear }, radiusFar: { value: radiusFar }, cameraNear: { value: 0.1 }, cameraFar: { value: 1000 }, useDepth: { value: 0 } } });
+      radiusNear: { value: radiusNear }, radiusFar: { value: radiusFar }, cameraNear: { value: 0.1 }, cameraFar: { value: 1000 }, useDepth: { value: 0 },
+      focusDepth: { value: 4 }, focusAmt: { value: 0 } } });
     this.finalMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: inkPixels ? FINAL : FINAL.replace('if (abs(ink.a - 0.5) < 0.12) color = ink.rgb;', ''), depthTest: false, depthWrite: false,
-      uniforms: { inputBuffer: { value: null }, sceneBuffer: { value: null }, resolution: { value: new THREE.Vector4() }, time: { value: 0 }, strength: { value: strength } } });
+      uniforms: { inputBuffer: { value: null }, sceneBuffer: { value: null }, resolution: { value: new THREE.Vector4() }, time: { value: 0 }, strength: { value: strength },
+        wash: { value: 0 }, flash: { value: 0 }, washInk: { value: col('ink') }, washPaper: { value: col('paper') } } });
+    // 筆 the brush's held moment (blade.js): the ink wash (0..1) and the painter's focus (the depth in metres where the brush goes fine)
+    this.brush = { wash: this.finalMat.uniforms.wash, flash: this.finalMat.uniforms.flash, focusDepth: this.kuwaharaMat.uniforms.focusDepth, focusAmt: this.kuwaharaMat.uniforms.focusAmt };
     this.fullscreenMaterial = this.finalMat;
   }
   setDepthTexture(depthTexture) { this.kuwaharaMat.uniforms.depthBuffer.value = depthTexture; this.kuwaharaMat.uniforms.useDepth.value = depthTexture ? 1 : 0; }

@@ -102,7 +102,9 @@ if (!opt('static', false) && !fails.some((f) => f.startsWith('S1'))) {
   if (pw) {
     const { server, url } = await serve(game);
     for (const name of engines) {
-      const browser = await pw[name].launch(name === 'chromium' ? { args: ['--use-angle=metal', '--enable-unsafe-swiftshader'] } : {});
+      // --enable-precise-memory-info: without it Chromium rounds performance.memory into ~4.5 MB buckets, and D4 read the same tree 189 or
+      // 194 MB run to run (9 Nov: heap 77.6 / 82.4 bucketed against 44.3-44.8 exact) — a ceiling read on a rounded number is a coin toss
+      const browser = await pw[name].launch(name === 'chromium' ? { args: ['--use-angle=metal', '--enable-unsafe-swiftshader', '--enable-precise-memory-info'] } : {});
       const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: name === 'chromium' });
       const errors = [];
       page.on('pageerror', (e) => errors.push(String(e.message || e).slice(0, 200)));

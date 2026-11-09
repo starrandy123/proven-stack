@@ -34,3 +34,11 @@ body.ki-100 #ki-fill { box-shadow: 0 0 10px #f0d27a; }
 .btn.storm { right: calc(118px + env(safe-area-inset-right)); bottom: calc(208px + env(safe-area-inset-bottom)); background: rgba(40, 30, 22, .35); opacity: .45; }
 body.ki-50 .btn.dash, body.ki-100 .btn.storm { background: rgba(168, 122, 28, .75); opacity: 1; }
 body.slowmo #game canvas { filter: saturate(.75) contrast(1.08); }
+/* 筆 the brush (blade.js): its three ink pots under the ki, its painted button above jump, glowing when a target is near */
+#ink { position: fixed; left: calc(20px + env(safe-area-inset-left)); top: calc(50px + env(safe-area-inset-top)); display: flex; gap: 7px; }
+#ink i { width: 13px; height: 13px; border-radius: 50% 45% 55% 50%; background: rgba(29, 23, 18, .35); box-shadow: inset 0 0 0 1.5px rgba(242, 232, 213, .55); }
+#ink i.part { background: radial-gradient(circle at 50% 70%, rgba(28, 21, 23, .85) 38%, rgba(29, 23, 18, .35) 42%); }
+#ink i.full { background: #1c1517; box-shadow: inset 0 0 0 1.5px rgba(242, 232, 213, .8); }
+.btn.brush { right: calc(34px + env(safe-area-inset-right)); bottom: calc(246px + env(safe-area-inset-bottom)); background: rgba(28, 21, 23, .55); }
+body.brush-near .btn.brush { background: rgba(28, 21, 23, .85); box-shadow: 0 0 0 3px rgba(158, 27, 22, .7); }
+body.brush-open .btn.brush { background: rgba(158, 27, 22, .85); transform: scale(.94); }

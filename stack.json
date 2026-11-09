@@ -334,6 +334,38 @@
       "imports": {
         "zzfx": "ZzFX.js"
       }
+    },
+    "pinata": {
+      "title": "three-pinata",
+      "by": "Daniel Greenheck",
+      "license": "MIT",
+      "home": "https://github.com/dgreenheck/three-pinata",
+      "does": "Real-time slicing and fracturing of three.js meshes: DestructibleMesh.slice / sliceWorld cut a mesh by any plane, with a second material on the new faces, and every piece can be cut again; Voronoi fracture too.",
+      "proof": [
+        {
+          "says": "Real-time mesh fracturing and slicing for Three.js",
+          "url": "https://github.com/dgreenheck/three-pinata"
+        },
+        {
+          "says": "Original OpenFracture Unity library",
+          "url": "https://github.com/dgreenheck/three-pinata",
+          "note": "its acknowledgments: the author's own Unity library came first (https://github.com/dgreenheck/OpenFracture)"
+        }
+      ],
+      "npm": [
+        {
+          "name": "@dgreenheck/three-pinata",
+          "version": "2.0.1",
+          "integrity": "sha512-1pQU68B5xguxvRryl6nxZBARDqOW+/lXf7Xpz8QZ87awadSpN85mDNChTEdA4fPfJYyrft+thHS6Ooe7E5rdFA==",
+          "files": {
+            "build/three-pinata.es.js": "three-pinata.es.js"
+          }
+        }
+      ],
+      "imports": {
+        "three-pinata": "three-pinata.es.js"
+      },
+      "license_note": "the MIT licence is the LICENSE file inside the npm release (Copyright (c) 2023 Daniel Greenheck); the GitHub repository has no LICENSE file, and its README says \"This project is licensed under the MIT License.\""
     }
   },
   "_what": "The catalogue: each library a shipped game or engine already trusts, pinned to an exact npm release (sha512). `node tools/stack.mjs list` prints it; `add` vendors it."

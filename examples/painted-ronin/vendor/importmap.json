@@ -3,6 +3,7 @@
     "fastnoise-lite": "./vendor/fastnoise/FastNoiseLite.js",
     "howler": "./vendor/howler/howler.min.js",
     "jolt-physics": "./vendor/jolt/jolt-physics.wasm-compat.js",
+    "three-pinata": "./vendor/pinata/three-pinata.es.js",
     "postprocessing": "./vendor/postprocessing/index.js",
     "three.quarks": "./vendor/quarks/three.quarks.esm.js",
     "quarks.core": "./vendor/quarks/quarks.core.esm.js",

@@ -62,7 +62,8 @@ const engine = opt('engine', 'chromium'), plant = opt('plant', null);
 const only = opt('only', null), want = (k) => !only || only.split(',').includes(k);
 const pw = await import('playwright');
 const { server, url } = await serve(path.resolve(HERE, '..'));
-const browser = await pw[engine].launch(engine === 'chromium' ? { args: ['--use-angle=metal', '--ignore-gpu-blocklist'] } : {});
+// --enable-precise-memory-info: W5's and B16's heap term exact, never Chromium's ~4.5 MB buckets (the same tree read 189 or 194: tools/check.mjs)
+const browser = await pw[engine].launch(engine === 'chromium' ? { args: ['--use-angle=metal', '--ignore-gpu-blocklist', '--enable-precise-memory-info'] } : {});
 const results = [];
 let blockBlots = null;
 const wall = (name, ok, detail) => { results.push({ name, ok, detail }); console.log(`${ok ? '✔' : '✖'} ${name}: ${detail}`); };
@@ -655,6 +656,220 @@ if (want('W2')) {
   const mem = await ph.page.evaluate(() => window.__STACK_MEMORY);
   wall('W5 phone', mem && mem.totalMB < 192, mem ? `${mem.totalMB.toFixed(0)} MB (${Object.entries(mem).filter(([k]) => k !== 'totalMB').map(([k, v]) => k + ' ' + Math.round(v)).join(', ')})` : 'no report');
   await ph.page.close();
+  }
+}
+
+// ── B · 筆 THE BRUSH (src/blade.js; research K_blade_mode.md §10): each wall measured on the running game, each with its own plant ──
+//   B1 the line      — the cut follows the sheet AS DRAWN at the release: every vertex of one piece on one side of it, of the other on the
+//                      other (≤ 1 mm)  (MGR: "the first strike in Blade Mode always follows the path displayed by the line")   plant bmskew
+//   B2 volume        — the two pieces' volumes sum to the target's within 2 %                                            plant bmshrink
+//   B3 time          — the world's clock ≤ 0.08 within 0.25 s of opening, back to ≥ 0.99 within 0.6 s of closing, his swing on the real
+//                      clock (the contact ≤ 0.35 s of real time after the release)                                plants bmnoslow, bmlinger
+//   B4 rooted        — the piece on the peg has not moved (≤ 1 mm); the top is on the ground within 3 s of the close        plant bmroot
+//   B5 the slide     — after a kesa cut the top's first 12 cm run down its own face (≤ 30° off the fall line); after a level cut high
+//                      on a mat the top rests on its base 2.5 s after the close (Jolt: tan θ against μ 0.45)                plant bmthrow
+//   B6 the inner face — every triangle of the inner group lies on the plane and wears the painted face; drawn alone, the mat's face shows
+//                      its roll (pale ≥ 25 %, straw ≥ 8 %)                                                               plant bmnoinner
+//   B7 the swipe     — at a phone's size, a touch drag on the right of the screen with 筆 open: the sheet's angle on the screen equals the
+//                      drag's within 3°, and the lift cuts                                                                plant bmswipe
+//   B8 the control   — 筆 is declared in __MOSA_CONTROLS, on the screen, ≥ 44 px, upright and turned; a real tap opens it  plants bmdead, bmhidden
+//   B9 the cap       — twelve cuts at the stalks never take the live pieces past 36                                       plant bmnocap
+//   B10 the frame    — at a phone's size, with ≥ 20 pieces, the brush's own work ≤ 2 ms a frame (median) and the frame ≤ 1.3× its time outside it
+//                                                                                                                       plant bmheavy
+//   B11 the camera   — in the brush the camera is where cam puts it (≤ 1 mm); 0.8 s after the close the lens, distance and height are the
+//                      follow camera's again (≤ 0.5°, ≤ 1 mm)                                                           plant bmcamstuck
+//   B12 the reach    — a stroke at a mat 3 m away cuts nothing                                                             plant bmreach
+//   B13 the ink      — three pots: three quick cuts, a fourth does nothing, the empty brush closes itself, a closed brush refills  plant bmfreeink
+//   B14 the contact  — the slice lands as the real blade (hilt to tip, off the skeleton) passes nearest the aim (± 1 frame of his clock),
+//                      inside the clip's contact window, the blade then ≤ 0.25 m from the aim: it goes through the mat
+//                                                                                                                         plant bmlate
+//   B15 the grade    — in the brush the frame's chroma falls to ≤ 40 % while a crimson patch keeps ≥ 80 % of its own; back within 0.8 s  plant bmnowash
+//   B16 the phone    — at a phone's size, the ground built and ≥ 20 pieces down, the page's own memory count stays < 192 MB
+const BW = `(() => { const G = window.__GAME, T = G.THREE, B = G.brush, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  const center = (x) => new T.Box3().setFromObject(x.mesh).getCenter(new T.Vector3());
+  const raf = () => new Promise((ok) => requestAnimationFrame(() => ok(performance.now())));
+  async function stage(i, d = 1.05) {               // the ronin d m in front of the stand's target, the camera behind him
+    const s = B.stands[i], x = B.pieces.find((q) => q.stand === s && q.whole) || B.pieces.find((q) => q.stand === s);
+    const c = center(x), back = new T.Vector3(G.camera.position.x - c.x, 0, G.camera.position.z - c.z).normalize();
+    const p = c.clone().addScaledVector(back, d); G.player.setPosition(p.x, G.land.groundY(p.x, p.z) + 0.05, p.z); G.facing = Math.atan2(c.x - p.x, c.z - p.z);
+    G.cam.yaw = Math.atan2(back.x, back.z); G.cam.pitch = 0.28; await wait(450); return x; }
+  async function cut(theta, { holdMs = 420, keepOpen = false } = {}) {
+    if (!B.active) B.open(G.me); await wait(holdMs); B.S.theta = theta; await raf(); await raf();
+    const n0 = B.events.length; B.release(G.me);
+    for (let i = 0; i < 90 && !B.events.slice(n0).some((e) => e.kind === 'contact'); i++) await raf();
+    const ev = B.events.slice(n0); await wait(60); if (!keepOpen) B.close();
+    return { release: ev.find((e) => e.kind === 'release'), contact: ev.find((e) => e.kind === 'contact'), slices: ev.filter((e) => e.kind === 'slice') }; }
+  const side = (mesh, n, o) => { mesh.updateMatrixWorld(true); const a = mesh.geometry.attributes.position, v = new T.Vector3(); let lo = 1e9, hi = -1e9;
+    for (let i = 0; i < a.count; i++) { v.fromBufferAttribute(a, i).applyMatrix4(mesh.matrixWorld); const d = n.dot(v.clone().sub(o)); lo = Math.min(lo, d); hi = Math.max(hi, d); } return { lo, hi }; };
+  // the final picture, read in the frame it was drawn (after the game's own work, before it is shown): mean chroma, and a patch's
+  function picture(patch) { return new Promise((done) => requestAnimationFrame(() => { const R = G.renderer, gl = R.getContext(), s = R.getDrawingBufferSize(new T.Vector2()), W = s.x, H = s.y;
+    const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let all = 0, n = 0, pc = 0, pn = 0; const q = patch ? patch.getWorldPosition(new T.Vector3()).project(G.camera) : null, cx = q ? Math.round((q.x + 1) / 2 * W) : -1, cy = q ? Math.round((q.y + 1) / 2 * H) : -1;
+    for (let y = 0; y < H; y += 3) for (let x = 0; x < W; x += 3) { const i = (y * W + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2], ch = (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
+      if (q && Math.abs(x - cx) < 10 && Math.abs(y - cy) < 10) { pc += ch; pn++; } else { all += ch; n++; } }
+    done({ chroma: all / Math.max(1, n), patch: pn ? pc / pn : null }); })); }
+  window.__BW = { G, T, B, wait, center, raf, stage, cut, side, picture }; })()`;
+
+if (want('B')) {
+  // ── page 1: one kesa cut through a mat, read every way (B1-B6, B11, B14, B15) ──
+  {
+    const { page, errors } = await open('test');
+    await page.evaluate(BW);
+    const r = await page.evaluate(async () => {
+      const { G, T, B, wait, raf, stage, cut, side, picture, center } = window.__BW;
+      const mat = await stage(0); const follow = { fov: G.camera.fov, dist: G.cam.dist, pitch: G.cam.pitch };
+      // B15: a crimson patch carried with the camera, the picture before
+      G.scene.add(G.camera); const patch = new T.Mesh(new T.PlaneGeometry(0.16, 0.16), new T.MeshBasicMaterial({ color: G.PALETTE.crimson, fog: false, depthTest: false }));
+      patch.renderOrder = 999; patch.position.set(-0.42, 0.22, -1.4); G.camera.add(patch); await raf(); await raf();
+      const pic0 = await picture(patch);
+      // B3 + B11: open, sample the clock and the camera every frame
+      const t0 = performance.now(); B.open(G.me); let reach = null, camOff = 0;
+      while (performance.now() - t0 < 520) { const t = await raf(); if (reach === null && B.timeScale <= 0.08) reach = (t - t0) / 1000;
+        const c = G.cam, off = new T.Vector3(Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)).multiplyScalar(c.dist), want = c.target.clone().add(off);
+        want.y = Math.max(want.y, G.land.groundY(want.x, want.z) + 0.6); camOff = Math.max(camOff, want.distanceTo(G.camera.position)); }
+      const pic1 = await picture(patch);
+      const before = center(mat), baseTop = B.stands[0].homes[0].base.y;
+      const { release, contact, slices } = await cut(0.62, { holdMs: 0, keepOpen: true });
+      const sl = slices.find((e) => e.of === 'straw');
+      // B1: the pieces against the sheet as it was drawn at the release
+      let line = null; if (sl && release) { const n = release.sheet.n, o = release.sheet.o, s = sl.pieces.map((p) => side(p.mesh, n, o)); line = s.map((x) => [+x.lo.toFixed(4), +x.hi.toFixed(4)]); }
+      // B2: volumes; B6: the inner group on the plane, its material, its pixels (the face drawn alone)
+      const vol = sl ? { whole: sl.volume, parts: sl.pieces.map((p) => B.volumeOf(p.mesh.geometry)) } : null;
+      let inner = null;
+      if (sl) { const p = sl.pieces[0], g = p.mesh.geometry, ix = g.index, pos = g.attributes.position, v = new T.Vector3(); let worst = 0, tris = 0;
+        for (const gr of g.groups.filter((q) => q.materialIndex === 1)) for (let i = gr.start; i < gr.start + gr.count; i++) { v.fromBufferAttribute(pos, ix ? ix.getX(i) : i).applyMatrix4(p.mesh.matrixWorld); worst = Math.max(worst, Math.abs(sl.n.dot(v.clone().sub(sl.o)))); tris++; }
+        const mats = [].concat(p.mesh.material), painted = mats[1] === B.materials.strawIn && mats[1] !== mats[0];
+        // drawn alone, from 0.32 m off its own face, lit by a key light from the eye; only the cut face's own pixels are read (a first render
+        // with the inner material swapped for a flag finds them: the first version of this wall counted the mat's outside around the face)
+        const sc = new T.Scene(), key = new T.DirectionalLight('#ffffff', 2.4); sc.add(new T.HemisphereLight('#ffffff', '#888888', 0.6), key, key.target); const parent = p.mesh.parent; sc.add(p.mesh);
+        const fc = new T.Box3().setFromObject(p.mesh).getCenter(new T.Vector3()), sd = side(p.mesh, sl.n, sl.o), s = Math.abs(sd.hi) > Math.abs(sd.lo) ? 1 : -1, onFace = fc.clone().addScaledVector(sl.n, -sl.n.dot(fc.clone().sub(sl.o)));   // the piece's side by its farthest vertex
+        const cam = new T.PerspectiveCamera(30, 1, 0.01, 10); cam.position.copy(onFace).addScaledVector(sl.n, -s * 0.32); cam.lookAt(onFace); cam.updateMatrixWorld(true);
+        key.position.copy(cam.position); key.target.position.copy(onFace);
+        const R = G.renderer, shot = (flag) => { const keep = p.mesh.material; if (flag) p.mesh.material = [keep[0], new T.MeshBasicMaterial({ color: 0xff0000 })];
+          const rt = new T.WebGLRenderTarget(96, 96); R.setRenderTarget(rt); R.setClearColor(0x000000, 0); R.clear(); R.render(sc, cam); const b = new Uint8Array(96 * 96 * 4); R.readRenderTargetPixels(rt, 0, 0, 96, 96, b); R.setRenderTarget(null); rt.dispose(); p.mesh.material = keep; return b; };
+        const mask = shot(true), b = shot(false); parent.add(p.mesh);
+        let pale = 0, straw = 0, n = 0; for (let i = 0; i < b.length; i += 4) { if (!(mask[i] > 200 && mask[i + 1] < 40 && mask[i + 2] < 40)) continue; n++; const r = b[i] / 255, gg = b[i + 1] / 255, bb = b[i + 2] / 255, mx = Math.max(r, gg, bb), ch = mx - Math.min(r, gg, bb);
+          const sat = ch / Math.max(mx, 1e-4); if (sat < 0.35 && mx > 0.35) pale++; else if (sat > 0.55 && r > bb && gg > bb) straw++; }
+        inner = { worst: +worst.toFixed(5), tris, painted, pale: n ? pale / n : 0, straw: n ? straw / n : 0, n }; }
+      // B14: the contact frame and the real tip against the cut line
+      let tip = null; if (contact && release) { const d = release.dir, o = contact.o, w = contact.tip.clone().sub(o); tip = +(w.clone().addScaledVector(d, -w.dot(d))).length().toFixed(3); }
+      // B5: the top's first 12 cm of travel against its face's fall line (watched from the cut on)
+      const top = sl ? sl.pieces.find((p) => p.dynamic) : null, rooted = sl ? sl.pieces.find((p) => !p.dynamic) : null;
+      const fall = new T.Vector3(0, -1, 0); if (sl) fall.addScaledVector(sl.n, -fall.dot(sl.n)).normalize();
+      const p0 = top ? center(top) : null, r0 = rooted ? center(rooted) : null; let slide = null;
+      B.close(); const tc = performance.now(); let back = null, onGround = null, camBack = null;
+      while (performance.now() - tc < 3200) { const t = await raf();
+        if (back === null && B.timeScale >= 0.99) back = (t - tc) / 1000;
+        if (top) { const p = center(top); if (slide === null && p.distanceTo(p0) >= 0.12) slide = +(Math.acos(Math.min(1, p.clone().sub(p0).normalize().dot(fall))) * 57.3).toFixed(1);
+          const lo = new T.Box3().setFromObject(top.mesh).min.y; if (onGround === null && lo <= G.land.groundY(p.x, p.z) + 0.06) onGround = (t - tc) / 1000; }
+        if (camBack === null && t - tc >= 2000) camBack = { fov: Math.abs(G.camera.fov - follow.fov), dist: Math.abs(G.cam.dist - follow.dist), pitch: Math.abs(G.cam.pitch - follow.pitch) }; }
+      const pic2 = await picture(patch); G.camera.remove(patch); G.scene.remove(G.camera);
+      const rootMoved = rooted ? +center(rooted).distanceTo(r0).toFixed(4) : null;
+      return { reach, camOff: +camOff.toFixed(4), pic: [pic0, pic1, pic2], line, vol, inner, tip, clip: contact ? { at: contact.clipTime, want: contact.contactT, nearT: contact.nearT, near: contact.near, after: +(contact.real - release.real).toFixed(3), cut: contact.cut } : null,
+        slide, onGround, back, camBack, rooted: rooted ? { dynamic: rooted.dynamic, y: +new T.Box3().setFromObject(rooted.mesh).min.y.toFixed(3), baseTop: +(baseTop - 0.05).toFixed(3) } : null, rootMoved, matBefore: before.y };
+    });
+    const ok = (k) => !errors.length && k;
+    const L = r.line, B1 = !!L && L.length === 2 && ((L[0][1] <= 1e-3 && L[1][0] >= -1e-3) || (L[0][0] >= -1e-3 && L[1][1] <= 1e-3));
+    wall('B1 the line', ok(B1), L ? `the pieces against the sheet as drawn: [${L.map((x) => x.join('..')).join(' | ')}] m (one side each, ≤ 1 mm)` : 'no slice of the mat');
+    const sum = r.vol ? r.vol.parts.reduce((s, v) => s + v, 0) : 0, err = r.vol ? Math.abs(sum - r.vol.whole) / r.vol.whole : 1;
+    wall('B2 volume', ok(!!r.vol && err <= 0.02), r.vol ? `${(r.vol.whole * 1e6).toFixed(0)} cm³ whole, ${(sum * 1e6).toFixed(0)} cm³ in its pieces (${(err * 100).toFixed(2)} %, ≤ 2)` : 'no slice');
+    wall('B3 time', ok(r.reach !== null && r.reach <= 0.25 && r.back !== null && r.back <= 0.6 && r.clip && r.clip.after <= 0.35),
+      `the clock ≤ 0.08 ${r.reach === null ? 'NEVER' : 'after ' + r.reach.toFixed(3) + ' s'} (≤ 0.25), back to 0.99 ${r.back === null ? 'NEVER' : 'after ' + r.back.toFixed(3) + ' s'} (≤ 0.6), the contact ${r.clip ? r.clip.after + ' s' : '—'} after the release (≤ 0.35)`);
+    wall('B4 rooted', ok(!!r.rooted && !r.rooted.dynamic && r.rootMoved !== null && r.rootMoved <= 1e-3 && r.onGround !== null && r.onGround <= 3), r.rooted ? `the piece on the peg ${r.rooted.dynamic ? 'FELL (dynamic)' : 'stayed (static)'}, moved ${r.rootMoved} m (≤ 0.001), the top on the ground ${r.onGround === null ? 'NEVER' : 'after ' + r.onGround.toFixed(2) + ' s'} (≤ 3)` : 'no rooted piece: both pieces fell');
+    const inner = r.inner;
+    wall('B6 the inner face', ok(!!inner && inner.tris > 0 && inner.worst <= 1e-3 && inner.painted && inner.pale >= 0.25 && inner.straw >= 0.08),
+      inner ? `${inner.tris / 3} inner triangles ≤ ${inner.worst} m off the plane, ${inner.painted ? 'the painted face' : 'NOT the painted face'}; drawn alone: pale ${(inner.pale * 100).toFixed(0)} % (≥ 25), straw ${(inner.straw * 100).toFixed(0)} % (≥ 8) of the face's ${inner.n} px` : 'no slice');
+    wall('B5 the slide, kesa', ok(r.slide !== null && r.slide <= 30), r.slide === null ? 'the top never travelled 12 cm' : `the top's first 12 cm run ${r.slide}° off its face's fall line (≤ 30)`);
+    wall('B11 the camera', ok(r.camOff <= 1e-3 && r.camBack && r.camBack.fov <= 0.5 && r.camBack.dist <= 1e-3 && r.camBack.pitch <= 1e-3),
+      `in the brush the camera ${r.camOff.toFixed(4)} m from where cam puts it (≤ 0.001); 2.0 s after the close (its 1.1 s linger on the cut, then the ease): lens ${r.camBack ? r.camBack.fov.toFixed(2) : '—'}° off (≤ 0.5), distance ${r.camBack ? r.camBack.dist.toFixed(4) : '—'}, height ${r.camBack ? r.camBack.pitch.toFixed(4) : '—'} (≤ 0.001)`);
+    wall('B14 the contact', ok(!!r.clip && r.clip.nearT !== undefined && Math.abs(r.clip.at - r.clip.nearT) <= 2.6 * 1.4 / 60 && r.clip.nearT >= r.clip.want - 0.1 && r.clip.nearT <= r.clip.want + 0.12 && r.clip.near <= 0.25),
+      r.clip ? `the slice at clip time ${r.clip.at.toFixed(3)} s, the blade nearest the aim at ${r.clip.nearT === undefined ? '—' : r.clip.nearT.toFixed(3)} s (detected the frame after; the clip's contact ${r.clip.want.toFixed(3)} s, window −0.1..+0.12), the blade ${r.clip.near === undefined ? '—' : r.clip.near.toFixed(3)} m from the aim (≤ 0.25)` : 'no contact');
+    const [a, b, c] = r.pic;
+    wall('B15 the grade', ok(b.chroma <= 0.4 * a.chroma && b.patch >= 0.8 * a.patch && c.chroma >= 0.8 * a.chroma),
+      `the frame's chroma ${a.chroma.toFixed(3)} → ${b.chroma.toFixed(3)} in the brush (${(b.chroma / a.chroma * 100).toFixed(0)} %, ≤ 40), the crimson patch ${a.patch.toFixed(3)} → ${b.patch.toFixed(3)} (${(b.patch / a.patch * 100).toFixed(0)} %, ≥ 80), back to ${c.chroma.toFixed(3)} (≥ 80 %)`);
+    if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
+    await page.close();
+  }
+  // ── page 2: a level cut high on a mat (B5), a mat out of reach (B12), the ink (B13) ──
+  {
+    const { page, errors } = await open('test');
+    await page.evaluate(BW);
+    const r = await page.evaluate(async () => {
+      const { G, T, B, wait, raf, stage, cut, center } = window.__BW;
+      const mat = await stage(1); const s = B.stands[1], top = s.homes[0].p.y + 0.45 - 0.12;
+      // the brush's tip at the mat's top (the line passes there): as the locked mouse would move it
+      B.open(G.me); await wait(380); { const q = new T.Vector3(center(mat).x, top, center(mat).z).project(G.camera); G.input.setCursor((q.x + 1) / 2 * innerWidth, (1 - q.y) / 2 * innerHeight); } await wait(120);
+      const lv = await cut(0.0, { holdMs: 0 }); const sl = lv.slices.find((e) => e.of === 'straw'), tp = sl ? sl.pieces.find((p) => p.dynamic) : null, rp = sl ? sl.pieces.find((p) => !p.dynamic) : null;
+      await wait(2500 + 600);
+      let rests = null; if (tp && rp) { const a = center(tp), lo = new T.Box3().setFromObject(tp.mesh).min.y, bt = new T.Box3().setFromObject(rp.mesh).max.y; rests = { off: +Math.hypot(a.x - center(rp).x, a.z - center(rp).z).toFixed(3), gap: +(lo - bt).toFixed(3) }; }
+      // B12: a mat 3 m away
+      await stage(2, 3.0); const far = await cut(0.6); const farCut = far.contact ? far.contact.cut : null;
+      // B13: three pots (the brush refills while closed: wait for it), three quick cuts, a fourth that does nothing
+      await stage(2); await wait(2600); const full = +B.S.ink.toFixed(2);
+      B.open(G.me); await wait(200); const cuts = []; for (let k = 0; k < 4; k++) { B.S.theta = [0.6, -0.6, 0.05, 0.6][k]; const n0 = B.events.length; const ok = B.release(G.me);
+        for (let i = 0; i < 40 && !B.events.slice(n0).some((e) => e.kind === 'contact'); i++) await raf(); await wait(240); cuts.push({ ok, contact: B.events.slice(n0).some((e) => e.kind === 'contact') }); }
+      await wait(500); const closedItself = !B.active; await wait(1700); const refilled = +B.S.ink.toFixed(2);
+      return { rests, farCut, full, cuts, closedItself, refilled };
+    });
+    const ok = (k) => !errors.length && k;
+    wall('B5 the slide, level', ok(!!r.rests && r.rests.off <= 0.08 && r.rests.gap >= -0.03 && r.rests.gap <= 0.03), r.rests ? `2.5 s after the close the top rests on its base: ${r.rests.off} m off its axis (≤ 0.08), ${r.rests.gap} m above its face (± 0.03)` : 'no level cut');
+    wall('B12 the reach', ok(r.farCut === 0), `a stroke at a mat 3 m away cut ${r.farCut === null ? 'nothing (no contact)' : r.farCut + ' target(s)'} (0)`);
+    const c = r.cuts;
+    wall('B13 the ink', ok(r.full >= 2.99 && c[0].contact && c[1].contact && c[2].contact && !c[3].ok && !c[3].contact && r.closedItself && r.refilled >= 1),
+      `full ${r.full} pots; cuts ${c.map((x) => (x.contact ? '✓' : '·')).join('')} (three, then none); the dry brush ${r.closedItself ? 'closed itself' : 'STAYED OPEN'}; refilled to ${r.refilled} (≥ 1)`);
+    if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
+    await page.close();
+  }
+  // ── page 3: a phone, upright (B7, B8, B9, B10, B16) and turned (B8) ──
+  for (const [w, h] of [[390, 844], [844, 390]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: engine === 'chromium', hasTouch: true, deviceScaleFactor: 2 });
+    // the platform's own device signal, as its phone passes set it before a game's code runs (certification.js: "it is set before your code runs")
+    await ctx.addInitScript(() => { window.__MOSA_DEVICE = { mobile: true, touch: true }; });
+    const page = await ctx.newPage(); const errors = []; page.on('pageerror', (e) => errors.push(String(e.message || e)));
+    await page.goto(url + 'index.html?test' + (plant ? '&plant=' + plant : ''));
+    await page.waitForFunction(() => window.__MOSA_BOOT && window.__MOSA_BOOT.ok === true, null, { timeout: 60000 }); await page.waitForTimeout(900);
+    await page.evaluate(BW);
+    const ctl = await page.evaluate(() => { const a = (window.__MOSA_CONTROLS && window.__MOSA_CONTROLS.actions || []).find((x) => x.id === 'brush'), e = a && document.querySelector(a.touch), r = e && e.getBoundingClientRect(), cs = e && getComputedStyle(e);
+      return { declared: !!a, found: !!e, visible: !!(e && cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && r.width > 0), on: !!(r && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight), w: r ? Math.round(Math.min(r.width, r.height)) : 0 }; });
+    await page.evaluate(() => window.__BW.stage(0));
+    let tapped = false; if (ctl.visible) { await page.tap('.btn.brush'); await page.waitForTimeout(160); tapped = await page.evaluate(() => window.__GAME.brush.active); }
+    wall(`B8 the control, ${w}×${h}`, !errors.length && ctl.declared && ctl.found && ctl.visible && ctl.on && ctl.w >= 44 && tapped,
+      `筆 ${ctl.declared ? 'declared' : 'NOT declared'}, ${ctl.found ? 'in the page' : 'MISSING'}, ${ctl.visible ? 'visible' : 'HIDDEN'}, ${ctl.on ? 'on the screen' : 'OFF the screen'}, ${ctl.w} px (≥ 44); a real tap ${tapped ? 'opened the brush' : 'did NOT open it'}`);
+    if (w < h) {
+      // B7: a drag on the right of the screen, through the game's own touch handlers
+      const sw = await page.evaluate(async () => {
+        const { G, T, B, wait, raf } = window.__BW, cv = G.renderer.domElement;
+        const ev = (type, x, y) => { const e = new Event(type, { bubbles: true, cancelable: true }); const t = [{ identifier: 7, clientX: x, clientY: y, target: cv }]; Object.defineProperty(e, 'changedTouches', { value: t }); Object.defineProperty(e, 'touches', { value: type === 'touchend' ? [] : t }); cv.dispatchEvent(e); };
+        const x0 = innerWidth * 0.62, y0 = innerHeight * 0.36, x1 = innerWidth * 0.9, y1 = innerHeight * 0.52, want = Math.atan2(-(y1 - y0), x1 - x0);
+        ev('touchstart', x0, y0); for (let k = 1; k <= 6; k++) { ev('touchmove', x0 + (x1 - x0) * k / 6, y0 + (y1 - y0) * k / 6); await raf(); } await raf(); await raf();
+        const a = B.sheet.position.clone(), d = new T.Vector3(1, 0, 0).applyQuaternion(B.sheet.quaternion), p = a.clone().addScaledVector(d, -0.3).project(G.camera), q = a.clone().addScaledVector(d, 0.3).project(G.camera);
+        const got = Math.atan2((q.y - p.y) * innerHeight, (q.x - p.x) * innerWidth), off = Math.abs(Math.atan2(Math.sin(2 * (got - want)), Math.cos(2 * (got - want)))) / 2 * 57.3;
+        const n0 = B.events.length; ev('touchend', x1, y1); for (let i = 0; i < 40 && !B.events.slice(n0).some((e) => e.kind === 'contact'); i++) await raf();
+        const c = B.events.slice(n0).find((e) => e.kind === 'contact'); return { off: +off.toFixed(2), cut: c ? c.cut : null };
+      });
+      wall('B7 the swipe', !errors.length && sw.off <= 3 && sw.cut >= 1, `the sheet on the screen ${sw.off}° off the drag (≤ 3); the lift cut ${sw.cut === null ? 'NOTHING (no contact)' : sw.cut + ' target(s)'}`);
+      // B9, B10, B16: many cuts at the stalks, the brush's own work timed, the frame against the frame outside it, the memory
+      const m = await page.evaluate(async () => {
+        const { G, B, wait, raf, stage } = window.__BW; if (B.active) B.close(); await wait(700);
+        const med = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] || 0; };
+        const frames = async (ms) => { const d = []; let t = await raf(); const t0 = t; while (t - t0 < ms) { const u = await raf(); d.push(u - t); t = u; } return med(d); };
+        await stage(3, 0.95); const outside = await frames(1500);
+        let maxLive = 0; const live = () => B.pieces.filter((x) => !x.out).length;
+        for (let k = 0; k < 4; k++) { B.S.ink = 3; B.open(G.me); await wait(250);
+          for (const th of [0.7, -0.5, 0.15]) { B.S.theta = th; const n0 = B.events.length; B.release(G.me); for (let i = 0; i < 40 && !B.events.slice(n0).some((e) => e.kind === 'contact'); i++) { await raf(); maxLive = Math.max(maxLive, live()); } await wait(220); maxLive = Math.max(maxLive, live()); }
+          B.close(); await wait(300); maxLive = Math.max(maxLive, live()); }
+        // the brush's own work, timed inside the game's own frame (its three calls), and the frame itself, with the pieces down
+        B.S.ink = 3; B.open(G.me); const own = []; const wrap = (k) => { const f = B[k]; B[k] = (...a) => { const t = performance.now(); const r = f(...a); own[own.length - 1] += performance.now() - t; return r; }; return f; };
+        const orig = ['frame', 'afterAnimate', 'sync'].map((k) => [k, wrap(k)]); let stop = false; (function tick() { if (stop) return; own.push(0); requestAnimationFrame(tick); })();
+        await wait(300); const inside = await frames(1500); stop = true; for (const [k, f] of orig) B[k] = f; B.close();
+        return { maxLive, pieces: live(), outside, inside, own: med(own.filter((x) => x > 0)), mem: window.__STACK_MEMORY ? Math.round(window.__STACK_MEMORY.totalMB) : null };
+      });
+      wall('B9 the cap', !errors.length && m.maxLive <= 36 && m.maxLive >= 12, `twelve cuts at the stalks: at most ${m.maxLive} live pieces (≤ 36)`);
+      wall('B10 the frame', !errors.length && m.pieces >= 20 && m.own <= 2 && m.inside <= 1.3 * m.outside, `${m.pieces} pieces down: the brush's own work ${m.own.toFixed(2)} ms a frame (≤ 2), the frame ${m.inside.toFixed(1)} ms in it against ${m.outside.toFixed(1)} outside (≤ 1.3×)`);
+      wall('B16 the phone', !errors.length && m.mem !== null && m.mem < 192, `the ground built and ${m.pieces} pieces down at ${w}×${h}: ${m.mem} MB (< 192)`);
+    }
+    if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
+    await ctx.close();
   }
 }
 
