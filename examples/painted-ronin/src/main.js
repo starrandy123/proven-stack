@@ -24,6 +24,9 @@ import { createLock, RANGE as LOCK_RANGE } from './lock.js';
 
 const Q = new URLSearchParams(location.search);
 const PLANT = Q.get('plant');                                               // test seams: a defect a wall must catch (tests/walls.mjs --plant …)
+// ?rate=0.5: the game's whole clock at half speed, for filming a beat slowed by the game itself, never by stretching the video (the
+// standard reel: "slowed by the game's own clock, never the video's")
+const RATE = Math.min(1, Math.max(0.05, +(Q.get('rate') || 1)));
 const PHONE = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
 const root = document.getElementById('game');
 const hud = { ki: document.getElementById('ki-fill'), hp: document.getElementById('hp-fill'), kills: document.getElementById('kills'), msg: document.getElementById('msg'), help: document.getElementById('help') };
@@ -78,7 +81,7 @@ const env = await buildEnvironment(scene, land, P, { plant: PLANT });
 // the CC0 props keep their own colours and take the oil strokes laid on them in the world (a moving character never does: strokes
 // fixed in the world would swim over a body that walks through them — Meier's shower door)
 for (const o of scene.children) if (!before.has(o)) o.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh) for (const mm of [].concat(m.material)) if (mm.isMeshStandardMaterial && !mm.userData.paint) paintSurface(mm, { region: 'field_a', scale: 0.6, strength: 0.3, band: 0 }); });
-const vfx = createVfx(scene, { phone: PHONE, plant: PLANT });
+const vfx = createVfx(scene, { phone: PHONE, plant: PLANT, land });
 const birds = createBirds(scene, land, { flocks: PHONE ? 2 : 3, perFlock: PHONE ? 10 : 14, plant: PLANT });
 // the clouds: Sea of Thieves' painted mass (clouds_painted.js); the old billboard puffs only as the planted defect the walls must catch
 const clouds = PLANT === 'sprites' ? createClouds(scene, { count: PHONE ? 10 : 16, phone: PHONE }) : createPaintedClouds(scene, { count: PHONE ? 12 : 22, phone: PHONE, sunDir, plant: PLANT, targetHeight: PLANT === 'bigclouds' ? 4000 : 280,
@@ -96,6 +99,12 @@ vfx.clipdata = clipdata;
 const bandits = new Bandits(scene, kit, navs, P, rest, land, { perCamp: Q.has('test') ? 1 : 4, frozen: PLANT === 'nav', clipdata });
 if (PLANT === 'budget') bandits.budgetOff = true;
 bandits.plant = PLANT;
+// the fighters draw after the ink blot (vfx.js, renderOrder 1), so at a contact the blot lies over the world and behind them (the ink
+// cut's drawBack): every mesh of the ronin and of each bandit, the sword, the hat and the scabbard with them
+for (const r of [ronin.root, ...bandits.list.map((b) => b.root)]) r.traverse((o) => { if (o.isMesh) o.renderOrder = 2; });
+// each bandit's STANDING height, off his head bone in the pose he is built in (the ink blot's rim is set against it, as the ink cut's act
+// sets its blot against a standing target; read at a contact, a flinch had already bent him to 1.43 m)
+for (const b of bandits.list) b.standH = b.bones.Head.getWorldPosition(new THREE.Vector3()).y - b.root.getWorldPosition(new THREE.Vector3()).y + 0.12;
 if (PLANT === 'ramp256') { const d = new Uint8Array(256).map((_, i) => i); const t = new THREE.DataTexture(d, 256, 1, THREE.RedFormat); t.needsUpdate = true; scene.getObjectByName('painted-rocks').material.gradientMap = t; }   // a smooth light: the bands gone
 // the painted fog on everything that takes fog, ending in the sky's own horizon colour, measured off the sky (and the clouds exposed to it)
 paintFogAll(scene);
@@ -110,7 +119,18 @@ composer.addPass(painterly);
 if (Q.has('raw')) painterly.enabled = false;
 
 // ── the ronin's fight ──
-const pc = { hp: 100, alive: true, queued: false, strike: null, roll: 0, invuln: 0, deadT: 0, kills: 0, ki: 0, special: null };
+const pc = { hp: 100, alive: true, queued: false, strike: null, roll: 0, invuln: 0, deadT: 0, kills: 0, ki: 0, special: null, chiburi: null };
+// THE CHIBURI (血振り, "shaking off the blood"; research §3 in the receipts' 2026-11-09_pixelfx/painted_ronin/RESEARCH.md). After a cut that
+// drew blood, once the chain is over and he stands with no input, he holds his finishing pose a moment (zanshin) and flicks the blade clean.
+// No CC0 library has an authored chiburi (UAL1, UAL2, Mesh2Motion's 234: searched), so it is Quaternius's authored Sword_Regular_A_Rec, the
+// recovery of the cut it follows: it begins exactly where Sword_Regular_A ends and carries the blade from high behind him down a diagonal
+// arc across the body to low in front, o-chiburi's arc ("swinging the tip in an arc as if cutting down the migi kesa line": Kenshi 24/7).
+// Ghost of Tsushima's Jin: "if there's blood on the sword, he'll do one of the cool, flick-like actions" · "an automatic one if you're
+// standing around" (Jason Connell, VG247, May 2020). Through the sweep's peak and its stop (its frames 17-23, the tip at 10 m/s) four
+// crimson drops leave the REAL tip with the blade's own velocity there: blood "released from an object due to its motion" and "due to its
+// abrupt deceleration" (ASB TR 033: cast-off and cessation patterns), landing on the floor in a line. Any input cancels it (plant nochiburi).
+const CHIBURI = { clip: 'Sword_Regular_A_Rec', speed: 1.15, zanshin: 0.8, frames: [17, 19, 21, 23], wet: 4 };   // zanshin 0.8 s: the flick lands ~1.3 s after the cut (the ink cut's FLICK)
+let blood = null, still = 0, hold = false;      // the blade wet since { t } (game time); seconds stood with no input; the finishing pose held
 // the combo, swift: cut, cut, a two-handed finisher; a strike while sprinting is a dash attack. Each strike's impact is MEASURED from
 // its clip; the next strike starts 166 ms after an impact that hit, 200 ms after one that missed (For Honor's cancel windows); a press
 // during a strike is buffered. Every strike goes to THE LOCK (lock.js: Arkham's Freeflow, God of War's targeting), and the ronin covers
@@ -155,6 +175,10 @@ let facing = 0, acc = 0, last = performance.now(), booted = false, time = 0;
 // is then (x to the side, z ahead, in the ronin's own frame) and which way it swings. The target is placed THERE, so the blade meets it.
 const contactOf = (clip) => (clipdata[clip] && clipdata[clip].contact) || { t: 0.25, frame: 15, reach: 1.1, off: 0, tip: [0, 1.1, 1.1], swing: [0, 0, 1] };
 const toWorld = (lx, ly, lz, out = new THREE.Vector3()) => out.set(pos.x + Math.cos(facing) * lx + Math.sin(facing) * lz, pos.y + ly, pos.z - Math.sin(facing) * lx + Math.cos(facing) * lz);
+const turnToWorld = (lx, ly, lz, out = new THREE.Vector3()) => out.set(Math.cos(facing) * lx + Math.sin(facing) * lz, ly, -Math.sin(facing) * lx + Math.cos(facing) * lz);
+// the way the blade's TIP travels at a frame of a clip, in the world: its tip two frames apart (assets/clipdata.json), turned by his facing
+const tipTravel = (clip, f) => { const d = clipdata[clip], a = d && d.tip[f - 1], b = d && d.tip[f + 1];
+  return a && b ? turnToWorld(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize() : new THREE.Vector3(Math.sin(facing), 0.3, Math.cos(facing)).normalize(); };
 function bestTarget(maxD = 6, cone = 70) {
   let best = null, score = 1e9;
   for (const b of bandits.alive()) {
@@ -173,7 +197,8 @@ function strikeTarget(dash) {
 }
 const reachOf = (C) => Math.hypot(C.off, C.reach) * (PLANT === 'reach' ? 1.7 : 0.92);
 function strike(i, def) {
-  let s = def || COMBO[i]; pc.queued = false;
+  let s = def || COMBO[i]; pc.queued = false; pc.chiburi = null; hold = false;
+  if (PLANT === 'chiburimiss') blood = { t: time };                    // plant: every swing wets the blade, a miss too
   const target = strikeTarget(s === DASH_STRIKE);
   let C = contactOf(s.clip), reach = reachOf(C), air = null;
   const to = target ? new THREE.Vector3().subVectors(target.root.position, pos).setY(0) : null;
@@ -200,7 +225,7 @@ function strike(i, def) {
   const impact = dash ? air.tA + air.T + (C.t - air.tau1) / s.speed : C.t / s.speed;
   // the clip's end: a press buffered during it still chains (Sword_Regular_A ends 0.41 s in, before a blocked or missed cut's window at
   // impact + 0.2 s: the buffered cut was dropped and no combo could go on past a block — found 8 Nov rehearsing the showcase's clash)
-  const onEnd = () => { const st = pc.strike; if (!st || st.def !== s) return; if (pc.queued && st.i >= 0 && st.i < 2 && PLANT !== 'dropchain') st.ended = true; else pc.strike = null; };
+  const onEnd = () => { const st = pc.strike; if (!st || st.def !== s) return; if (pc.queued && st.i >= 0 && st.i < 2 && PLANT !== 'dropchain') st.ended = true; else { pc.strike = null; hold = !!blood; } };
   const a = air && air.kind === 'leap'
     ? (PLANT === 'frog' ? ronin.playSplit(s.clip, 'NinjaJump_Start', { upperSpeed: s.speed, lowerSpeed: 1.5, fade: 0.06 })
       : ronin.playSplit(s.clip, 'spear-thrust', { upperSpeed: s.speed, lowerSpeed: 0.3, lowerAt: 0.42, fade: 0.06 }))
@@ -224,6 +249,7 @@ bandits.onBlow = (b, dir, kind) => {
     sfx('clash'); vfx.hit(pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(toB, 0.7), toB, false); trauma += 0.25; freeze = 0.06; slow = Math.max(slow, 0.45); pc.ki = Math.min(100, pc.ki + 25);
     bandits.flinchKick(b, toB, 0.5); return;
   }
+  pc.chiburi = null; hold = false;                                       // a blow taken breaks his zanshin
   pc.hp -= kind === 'heavy' ? 18 : kind === 'combo' ? 8 : 10; trauma = Math.min(1, trauma + (kind === 'heavy' ? 0.7 : 0.45)); freeze = 0.06; sfx('hurt');
   vfx.hit(pos.clone().add(new THREE.Vector3(0, 1.3, 0)), dir.clone().negate(), true);
   pc.knock = { dir: dir.clone(), left: kind === 'heavy' ? 0.9 : 0.3 };
@@ -303,7 +329,8 @@ function specialUpdate(dt) {
       sp.fallAt = sp.t + 0.32;                                               // a beat of silence, then they fall
     }
     if (sp.t >= sp.fallAt && sp.victims) {
-      for (const b of sp.victims) { if (b.dead) continue; const d = b.root.position.clone().sub(sp.from).setY(0).normalize(); bandits.hit(b, sp.dir.clone().multiplyScalar(0.6).add(d.multiplyScalar(0.4)).normalize(), PLANT === 'specials' ? 0 : 4, { breaksGuard: true }); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), sp.dir, true); }
+      for (const b of sp.victims) { if (b.dead) continue; const d = b.root.position.clone().sub(sp.from).setY(0).normalize(); bandits.hit(b, sp.dir.clone().multiplyScalar(0.6).add(d.multiplyScalar(0.4)).normalize(), PLANT === 'specials' ? 0 : 4, { breaksGuard: true }); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), sp.dir, true);
+        if (PLANT !== 'specials') { vfx.wound(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), sp.dir.clone().setY(0.35).normalize(), b.dead ? 2 : 1); blood = { t: time }; } }
       if (sp.victims.size) { sfx('cut'); slow = Math.max(slow, 0.9); trauma = Math.min(1, trauma + 0.5); vfx.pressStroke(sp.stroke, [...sp.victims].some((b) => b.dead) ? 2 : 1); }
       sp.victims = null; setTimeout(() => { if (pc.special === sp) pc.special = null; }, 250);
     }
@@ -322,6 +349,7 @@ function specialUpdate(dt) {
       for (const b of bandits.alive()) {
         const d = b.root.position.clone().sub(pos); d.y = 0; if (d.length() > 3.6) continue;
         n++; bandits.hit(b, d.normalize(), PLANT === 'specials' ? 0 : 2, { breaksGuard: true, hold: !last }); vfx.hit(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), d, true);
+        if (PLANT !== 'specials') { vfx.wound(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), d.clone().setY(0.35).normalize(), b.dead ? 2 : 1); blood = { t: time }; }
         for (const rk of ring) vfx.pressStroke(rk, b.dead ? 2 : 1);           // the ring swells where it wounds, more where it kills
       }
       sfx(n ? 'cut' : 'swing'); trauma = Math.min(1, trauma + (last ? 0.55 : 0.25)); freeze = n ? 0.06 : 0; if (last) slow = Math.max(slow, 0.5);
@@ -338,7 +366,7 @@ const cam = { yaw: Math.PI * 0.85, pitch: 0.28, dist: 6.0, target: new THREE.Vec
 const STEP = 1 / 60;
 
 function frame(now) {
-  const realDt = Math.min(0.1, (now - last) / 1000); last = now;
+  const realDt = Math.min(0.1, (now - last) / 1000) * RATE; last = now;
   const inp = input.read();
   freeze = Math.max(0, freeze - realDt); slow = Math.max(0, slow - realDt);
   const dt = freeze > 0 ? 0 : realDt * (slow > 0 ? 0.3 : 1);              // hit-stop holds the world; slow motion runs it at 0.3x; the camera stays real-time
@@ -367,6 +395,18 @@ function frame(now) {
       const clip = along > 0.5 ? 'Roll' : along < -0.5 ? 'dodge-back' : side > 0 ? 'dodge-left' : 'dodge-right';
       ronin.play(clip, { loop: false, fade: 0.05, speed: clip === 'Roll' ? 1.6 : 1.5 });
     }
+  }
+  // the chiburi: any input breaks it (and the held finishing pose); once he has stood CHIBURI.zanshin with a wet blade, the flick
+  const acting = inp.strike || inp.roll || inp.dash || inp.storm || inp.jump || Math.hypot(inp.mx, inp.my) > 0.3;
+  if (acting || !pc.alive || pc.special || pc.roll > 0) hold = false;
+  if (pc.chiburi && (acting || !pc.alive || pc.strike || pc.special || pc.roll > 0)) { pc.chiburi = null; if (ronin.oneShot === CHIBURI.clip) ronin.oneShot = null; }
+  still = pc.alive && !pc.strike && !pc.special && pc.roll <= 0 && !acting ? still + dt : 0;
+  if (blood && !pc.chiburi && still >= CHIBURI.zanshin) {
+    if (time - blood.t <= CHIBURI.wet && PLANT !== 'nochiburi') {
+      const ch = { t: 0, next: 0, at: time, from: blood.t }; pc.chiburi = ch;
+      ronin.play(CHIBURI.clip, { loop: false, fade: 0.12, speed: CHIBURI.speed, onEnd: () => { if (pc.chiburi === ch) pc.chiburi = null; } });
+    }
+    blood = null; hold = false;
   }
   let speed = inp.run ? 8.0 : 5.2;                                       // Overgrowth's numbers: 8 m/s on the run
   if (pc.strike) { speed = 0; pc.strike.t += dt; }
@@ -426,8 +466,16 @@ function frame(now) {
   }
   if (pc.special && pc.special.kind === 'dash') pc.special.lift = Math.max(pc.special.lift || 0, pos.y - land.groundY(pos.x, pos.z));
   ronin.root.position.copy(pos); ronin.root.rotation.y = facing;
-  { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
+  { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike && !pc.chiburi && !hold) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
   ronin.update(dt);
+  if (pc.chiburi) {                                                       // the flick's drops, off the REAL tip, at the clip's own frames
+    const ch = pc.chiburi, d = clipdata[CHIBURI.clip]; ch.t += dt;
+    while (ch.next < CHIBURI.frames.length && ch.t * CHIBURI.speed >= CHIBURI.frames[ch.next] / 60) {
+      const f = CHIBURI.frames[ch.next++], a = d.tip[f - 1], b = d.tip[f + 1];
+      const v = turnToWorld(b[0] - a[0], b[1] - a[1], b[2] - a[2]).multiplyScalar(30 * CHIBURI.speed);   // two 60 fps frames apart, at the flick's speed
+      vfx.castOff(ronin.sword.userData.tip.getWorldPosition(new THREE.Vector3()), v);
+    }
+  }
 
   // the blow lands in its window: every bandit in front, within reach
   if (pc.strike && !pc.strike.hit) {
@@ -450,13 +498,18 @@ function frame(now) {
         st.landed = true; sfx('cut'); pc.ki = Math.min(100, pc.ki + 12);
         vfx.pressArc(st.arc, b.dead ? 2 : 1);                                // the brush presses into a wound, hardest on a death
         vfx.hit(at, dir, true);
+        // the ink cut's beats (vfx.js): the blot behind him and the stroke bare paper for the instant, the drops flung along the stroke's
+        // own travel (the tip's velocity at contact, off its clip), and the blade now wet for the chiburi
+        vfx.contact(at, b.standH, b.dead ? 2 : 1, st.arc, camera); vfx.wound(at, tipTravel(s.clip, C.frame), b.dead ? 2 : 1); blood = { t: time };
         freeze = s.power > 1 || b.dead ? 0.11 : 0.07; trauma = Math.min(1, trauma + (s.power > 1 ? 0.45 : 0.28));
       }
     }
   }
+  // plant missflecks: a cut that met no one flings the drops anyway (W17 must catch it)
+  if (PLANT === 'missflecks' && pc.strike && !pc.strike.hit && !pc.strike.flung && pc.strike.t > pc.strike.impact + 0.07) { const st = pc.strike; st.flung = true; vfx.wound(toWorld(st.contact.tip[0], st.contact.tip[1], st.contact.tip[2]), tipTravel(st.def.clip, st.contact.frame), 1); }
   bandits.update(dt, ronin, pos, pc.alive);
   vfx.trailUpdate(ronin.sword, !!pc.strike && pc.strike.t / pc.strike.dur > 0.15 && pc.strike.t / pc.strike.dur < 0.7);
-  vfx.update(dt, pos); vfx.strokeUpdate(realDt, camera); vfx.lockMark(PLANT === 'nolock' || !pc.alive ? null : lock.target, realDt);
+  vfx.update(dt, pos, camera); vfx.strokeUpdate(realDt, camera); vfx.lockMark(PLANT === 'nolock' || !pc.alive ? null : lock.target, realDt);
   birds.update(realDt, pos, bandits.list.some((b) => !b.dead && b.state !== 'idle' && b.state !== 'return') ? 1 : 0); clouds.update(realDt); sway.update(realDt);
   for (const c of env.camps) { c.fire.light.intensity = 5 + Math.sin(time * 11) * 0.8 + Math.sin(time * 23) * 0.5; for (const f of c.group.userData.flags) f.rotation.y = f.userData.base + Math.sin(time * 1.7 + f.userData.wave) * 0.25; }
 
@@ -491,7 +544,7 @@ function frame(now) {
 }
 
 function respawn() {
-  pc.hp = 100; pc.alive = true; pc.deadT = 0; pc.strike = null; ronin.play('Idle_Loop', { loop: true });
+  pc.hp = 100; pc.alive = true; pc.deadT = 0; pc.strike = null; pc.chiburi = null; blood = null; hold = false; ronin.play('Idle_Loop', { loop: true });
   player.setPosition(SPAWN.x, SPAWN.y, SPAWN.z); say('The ronin rises again', 2200);
 }
 
@@ -509,5 +562,6 @@ function memory() {
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   const s = renderer.getDrawingBufferSize(new THREE.Vector2()); skyPaint.setResolution(s.x, s.y); if (clouds.setSize) clouds.setSize(s.x, s.y); });
 window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, LEAP_STRIKE, lock, LOCK_RANGE, birds, clouds, sky, skyPaint, paint, PALETTE, RAMP, WIND, sunDir,
-  get facing() { return facing; }, set facing(v) { facing = v; } };
+  get facing() { return facing; }, set facing(v) { facing = v; },
+  CHIBURI, tipTravel, GRID: { N, SPACING }, get blood() { return blood; }, get still() { return still; }, get hold() { return hold; }, get time() { return time; } };
 requestAnimationFrame(frame);

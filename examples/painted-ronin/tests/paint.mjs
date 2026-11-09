@@ -96,6 +96,8 @@ await page.evaluate(() => {
     G.vfx.smokes.forEach((s, i) => uses('smoke' + i, s.material.map === atlas));
     uses('sparks', G.vfx.pools.spark[0].material.map === atlas); uses('ink', G.vfx.pools.ink[0].material.map === atlas);
     uses('trail', G.vfx.trail.material.uniforms.paintAtlas.value === atlas);
+    // the ink cut's beats, painted (8 Nov): the blot at contact, the flung drops, the stains they leave
+    uses('blot', G.vfx.blot.material.uniforms.paintAtlas.value === atlas); uses('drops', G.vfx.dropMesh.material.uniforms.paintAtlas.value === atlas); uses('stains', G.vfx.stainMesh.material.uniforms.paintAtlas.value === atlas);
     G.vfx.slashArc(G.ronin, 'Sword_Regular_A', 1, 0.2, false); G.vfx.slashArc(G.ronin, 'Sword_Regular_B', 1, 0.2, true);
     const arcs = G.vfx.arcs.slice(-2); arcs.forEach((a, i) => uses('slash' + i, a.m.material.uniforms.paintAtlas.value === atlas));
     G.vfx.stroke(new T.Vector3(0, 1, 0), new T.Vector3(2, 1, 0), { color: 'ink' }); const st = G.vfx.strokes[G.vfx.strokes.length - 1];
@@ -126,6 +128,7 @@ await page.evaluate(() => {
     sc(G.vfx.leaves, 'leaves'); G.vfx.smokes.forEach((s, i) => sc(s, 'smoke' + i)); sc(G.vfx.pools.spark[0], 'sparks'); sc(G.vfx.pools.ink[0], 'ink');
     arcs.forEach((a, i) => { for (const k of ['paperC', 'crimsonC', 'inkC']) add('slash' + i + '.' + k, U(a.m.material, k)); });
     add('dash', st.m.material.color); add('trail', U(G.vfx.trail.material, 'paperC'));
+    add('blot.ink', U(G.vfx.blot.material, 'inkC')); for (const [n, m] of [['drops', G.vfx.dropMesh.material], ['stains', G.vfx.stainMesh.material]]) { add(n + '.ink', U(m, 'inkC')); add(n + '.crimson', U(m, 'crimsonC')); }
     const off = authored.map(([n, c]) => [n, ...nearest(c)]).filter(([, d]) => d > 0.02).map(([n, d, k]) => `${n} ${d.toFixed(3)} from ${k}`);
     return { seen: seen.length, bad, rampBad, R3, swatches: sw.length, authored: authored.length, off: off.slice(0, 4), offN: off.length };
   });

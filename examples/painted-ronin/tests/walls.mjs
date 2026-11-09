@@ -27,9 +27,21 @@
 //   W12 the press — the brush presses where the blade wounds: a cut that wounds is ≥ 1.6× as wide as a cut in the air, a cut that
 //                  kills ≥ 2.6× (and ≥ 1.3× a wound) and lingers ≥ 1.2 s; 閃's ink line swells ≥ 1.8× over a body it kills (sumi-e: light
 //                  pressure thin, heavy pressure bold; the owner, 8 Nov: "thicker as they injure their enemies … and show death") plant nopress
+//   W16 the blot — a cut that wounds or kills shows an ink blot BEHIND the fighters (his own pixels unchanged by it) for 0.07 s of game
+//                  time, held through the hit-stop, its reach about his height, the stroke bare paper meanwhile; none on a miss or a
+//                  block (the ink cut's contact; Sakuga Booru's shock frames)                  plants noblot, blotfront, paperoff
+//   W17 the flecks — a wound flings 9 drops along the stroke's own travel (4 crimson, 5 ink) and 3 ink back, a kill 14 (10 crimson); each
+//                  lands as a stain lying on the terrain's own triangles (≤ 1 cm) and has dried away by 2.35 s (a kill 2.95 s), read in
+//                  pixels from above; a miss flings none                      plants nostains, floatstains, nodry, missflecks
+//   W18 the chiburi — standing still after a wound, Sword_Regular_A_Rec flicks 4 crimson drops off the REAL blade tip 1.0-1.6 s after the
+//                  cut; they land in a line (≤ 0.15 m off it, ≥ 0.25 m along), each stain length ÷ width within 12 % of 1/sin α of its
+//                  drop's flight; no flick after a cut in the air                                plants nochiburi, chiburimiss
+//   W19 the crimson — the stroke's own pixels: a cut in the air ≤ 2 % crimson; a wound ≥ 5 %, its inner half ≥ 2× its outer; a kill
+//                  ≥ 30 % and ≥ 1.5× a wound (flooded)                                                    plant misscrimson
 //   W13 clear view — the follow camera never sits inside a camp's smoke column: with the ronin 1 m from a fire and the camera aimed
 //                  through it, the lens stays ≥ 2.5 m from the smoke's axis (Cinemachine's collider; the 8 Nov reveal went white)  plant camclip
-//   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee]   (a plant must turn its wall red: exit 1)
+//   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee] [--only W2,W3,W6,W8,W9,W10,W14,W12,ink,W13,W5]
+//   (a plant must turn its wall red: exit 1)
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '../../../tools/serve.mjs';
@@ -37,10 +49,13 @@ import { serve } from '../../../tools/serve.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2), opt = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
 const engine = opt('engine', 'chromium'), plant = opt('plant', null);
+// --only W14,ink: run just those blocks (a plant's own walls); every wall runs by default
+const only = opt('only', null), want = (k) => !only || only.split(',').includes(k);
 const pw = await import('playwright');
 const { server, url } = await serve(path.resolve(HERE, '..'));
 const browser = await pw[engine].launch(engine === 'chromium' ? { args: ['--use-angle=metal', '--ignore-gpu-blocklist'] } : {});
 const results = [];
+let blockBlots = null;
 const wall = (name, ok, detail) => { results.push({ name, ok, detail }); console.log(`${ok ? '✔' : '✖'} ${name}: ${detail}`); };
 
 async function open(query, viewport = { width: 960, height: 540 }) {
@@ -53,7 +68,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
 }
 
 // W2: ragdolls
-{
+if (want('W2')) {
   const { page, errors } = await open('test' + (plant ? '&plant=' + plant : ''));
   const r = await page.evaluate(async () => {
     const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -77,6 +92,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
 }
 
 {
+  if (want('W3')) {
   // W3 + W4: pursuit and combat at camp 1
   const { page, errors } = await open('test');
   const r = await page.evaluate(async () => {
@@ -97,6 +113,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
   wall('W4 combat', r.dead, `down in ${r.blows} blow(s)`);
   await page.close();
 
+  }
   // W6 + W7: the specials, each on a fresh page with camp 0's bandits placed by hand (teleported on their own navmesh, told to hold)
   const special = async (kind) => {
     const { page, errors } = await open('');
@@ -115,11 +132,11 @@ async function open(query, viewport = { width: 960, height: 540 }) {
     await page.close();
     return { ...r, errors };
   };
-  { const r = await special('dash'); wall('W6 dash', r.down.every(Boolean) && !r.spared.some(Boolean) && !r.errors.length, `in the line: ${r.down.filter(Boolean).length}/2 down · out of it: ${r.spared.filter((d) => !d).length}/2 standing`); }
-  { const r = await special('storm'); wall('W7 storm', r.down.every(Boolean) && !r.spared.some(Boolean) && !r.errors.length, `around him: ${r.down.filter(Boolean).length}/2 down · beyond 3.6 m: ${r.spared.filter((d) => !d).length}/2 standing`); }
+  if (want('W6')) { const r = await special('dash'); wall('W6 dash', r.down.every(Boolean) && !r.spared.some(Boolean) && !r.errors.length, `in the line: ${r.down.filter(Boolean).length}/2 down · out of it: ${r.spared.filter((d) => !d).length}/2 standing`); }
+  if (want('W6')) { const r = await special('storm'); wall('W7 storm', r.down.every(Boolean) && !r.spared.some(Boolean) && !r.errors.length, `around him: ${r.down.filter(Boolean).length}/2 down · beyond 3.6 m: ${r.spared.filter((d) => !d).length}/2 standing`); }
 
   // W8: turn-taking, measured on camp 0's four live bandits while the ronin stands among them (invulnerable, not striking)
-  {
+  if (want('W8')) {
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
       const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -141,7 +158,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
   }
 
   // W9: the blade connects (each strike of the combo on a bandit standing 3.5 m in front of the ronin)
-  {
+  if (want('W9')) {
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
       const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -180,7 +197,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
   // W10 + W11: the lock and the dash. One bandit 7 m away at 110° from the ronin's facing (the others far off), one strike; then a bandit
   // 3.5 m ahead and the combo's first cut (a lunge). Every rendered frame reads the BONES, not the game's own record: the root's height
   // over the ground, each foot's middle and height, and at mid-dash the front leg's knee; the strike's record says only its kind and clip.
-  {
+  if (want('W10')) {
     const KNEE_MAX = 120;
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
@@ -234,7 +251,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
 
   // W14 + W15: the guard and the chain. One bandit 1.6 m in front, engaged and facing the ronin, his guard certain and no blow of his own;
   // the combo's first cut with the next press buffered during it. Read: what his guard did, and whether the second cut followed.
-  {
+  if (want('W14')) {
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
       const G = window.__GAME, T = G.THREE, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -247,6 +264,7 @@ async function open(query, viewport = { width: 960, height: 540 }) {
       G.bandits.setState(b, 'engage'); await wait(700); b.cool = 99;
       const facing = Math.round(Math.acos(Math.max(-1, Math.min(1, new T.Vector3(Math.sin(b.facing), 0, Math.cos(b.facing)).dot(p.clone().sub(b.root.position).setY(0).normalize())))) * 57.3);
       const results = [], H = G.bandits.hit.bind(G.bandits); G.bandits.hit = (bb, ...a) => { const out = H(bb, ...a); if (bb === b) results.push(out); return out; };
+      let blots = 0; const t0b = performance.now(), seeBlot = () => { if (G.vfx.blot.visible) blots++; if (performance.now() - t0b < 900) requestAnimationFrame(seeBlot); }; requestAnimationFrame(seeBlot);
       G.bandits.blockChance = 1; G.facing = Math.atan2(-1, 0); G.pc.strike = null; G.strike(0);
       // the clash clears a press made before it (a blocked cut interrupts the combo, by design); the press that must not be lost is the
       // one made AFTER the clash, while the blocked cut recovers
@@ -254,16 +272,17 @@ async function open(query, viewport = { width: 960, height: 540 }) {
       await wait(60); const pressedAt = G.pc.strike ? +(G.pc.strike.t - G.pc.strike.impact).toFixed(3) : null; G.pc.queued = true;
       let second = false; for (let k = 0; k < 40; k++) { await wait(25); if (G.pc.strike && G.pc.strike.i === 1) { second = true; break; } }
       G.bandits.blockChance = 0; G.bandits.hit = H;
-      return { first: results[0] || 'none', second, facing, state: b.state, pressedAt };
+      return { first: results[0] || 'none', second, facing, state: b.state, pressedAt, blots };
     });
     wall('W14 the guard', r.first === 'blocked' && !errors.length, `a bandit facing the ronin (${r.facing}° off) with his guard up, the combo's sideways first cut: ${r.first} (blocked)`);
+    blockBlots = r.first === 'blocked' ? r.blots : null;                       // W16 reads it: a blocked cut draws no blot
     wall('W15 the chain', r.second && !errors.length, `a press made after the clash (${r.pressedAt} s past the blocked cut's impact): the second cut ${r.second ? 'followed' : 'did NOT follow'}`);
     await page.close();
   }
 
   // W12: the press. Three cuts of the same clip from 2.2 m — in the air, into a bandit who lives, into one who dies — and 閃 through a
   // bandit it kills; the crescent's widest band read off its own geometry, the ink line's drawn width off its mesh.
-  {
+  if (want('W12')) {
     const { page, errors } = await open('');
     const r = await page.evaluate(async () => {
       const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -292,8 +311,153 @@ async function open(query, viewport = { width: 960, height: 540 }) {
     await page.close();
   }
 
+  // W16 the blot · W17 the flecks · W18 the chiburi · W19 the crimson: THE INK CUT'S BEATS, PAINTED (the receipts'
+  // 2026-11-09_pixelfx/painted_ronin/RESEARCH.md). One page and a dry blade: a cut in the air, a cut that wounds (then he stands still), a cut
+  // that kills. Every reading is the running game's own: its pixels rendered from its camera without the oil pass, its meshes' geometry, the
+  // skeleton's real blade tip, its clock. Its logs are never read for a verdict.
+  if (want('ink')) {
+    const { page, errors } = await open('');
+    const r = await page.evaluate(async () => {
+      const G = window.__GAME, T = G.THREE, R = G.renderer, V = G.vfx, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      G.bandits.blockChance = 0; G.bandits.feintChance = 0; G.pc.invuln = 99;
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+      const put = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+      const away = (b) => put(b, c.x - 9, c.y + 9); camp.forEach(away);
+      // the probe: the scene from a camera (the game's own unless given), no oil pass, into a small half-float target; `only` draws just those
+      const PW = 320, PH = 180;
+      const shot = (only, cam = G.camera) => {
+        const rt = new T.WebGLRenderTarget(PW, PH, { type: T.HalfFloatType }), hidden = [];
+        if (only) G.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o.visible && !only.includes(o)) { o.visible = false; hidden.push(o); } });
+        const cc = R.getClearColor(new T.Color()), ca = R.getClearAlpha();
+        R.setRenderTarget(rt); R.setClearColor(0x000000, 0); R.clear(); R.render(G.scene, cam); R.setClearColor(cc, ca); R.setRenderTarget(null);
+        const b = new Uint16Array(PW * PH * 4); R.readRenderTargetPixels(rt, 0, 0, PW, PH, b); rt.dispose(); for (const o of hidden) o.visible = true;
+        const f = new Float32Array(b.length); for (let i = 0; i < b.length; i++) f[i] = T.DataUtils.fromHalfFloat(b[i]); return f;
+      };
+      const lum = (f, i) => 0.2126 * f[i * 4] + 0.7152 * f[i * 4 + 1] + 0.0722 * f[i * 4 + 2];
+      const meshesOf = (root) => { const a = []; root.traverse((o) => { if (o.isMesh) a.push(o); }); return a; };
+      // a stroke's pixels, un-premultiplied: crimson where the red carries it (the swatch is r 0.34, g and b 0.01 in linear light)
+      const crimson = (f) => { let n = 0, red = 0, L = 0; for (let i = 0; i < PW * PH; i++) { const a = f[i * 4 + 3]; if (a < 0.25) continue; n++; const r = f[i * 4] / a, g = f[i * 4 + 1] / a, b = f[i * 4 + 2] / a; L += lum(f, i) / a; if (r > 0.05 && r > 3 * Math.max(g, b)) red++; } return { n, share: n ? +(red / n).toFixed(3) : 0, lum: n ? +(L / n).toFixed(3) : 0 }; };
+      // one half of the stroke's band, the other half folded onto its middle: the inner half runs toward the hilt (its uv.y 0), the outer past the tip
+      const half = (arc, which) => { const g = arc.m.geometry, P = g.attributes.position, U = g.attributes.uv, kP = P.array.slice(), kU = U.array.slice();
+        for (let j = 0; j + 1 < P.count; j += 2) { const fold = which === 'inner' ? j + 1 : j; for (let k = 0; k < 3; k++) P.array[fold * 3 + k] = (kP[j * 3 + k] + kP[(j + 1) * 3 + k]) / 2; U.array[fold * 2 + 1] = 0.5; }
+        P.needsUpdate = U.needsUpdate = true; const f = shot([arc.m]); P.array.set(kP); U.array.set(kU); P.needsUpdate = U.needsUpdate = true; return crimson(f); };
+      // the terrain's own surface under (x, z): the triangle terrainMesh draws there (its diagonal runs from (i+1, j) to (i, j+1))
+      const { N, SPACING } = G.GRID, HALF = (N - 1) * SPACING / 2, Hh = G.land.heights;
+      const surface = (x, z) => { const fx = (x + HALF) / SPACING, fz = (z + HALF) / SPACING, i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
+        const a = Hh[j * N + i], b = Hh[j * N + i + 1], c2 = Hh[(j + 1) * N + i], d = Hh[(j + 1) * N + i + 1];
+        return tx + tz <= 1 ? a + (b - a) * tx + (c2 - a) * tz : d + (c2 - d) * (1 - tx) + (b - d) * (1 - tz); };
+      // the stains of the stain mesh's own buffer: per slot, its vertices and its landing clock (aInfo.x)
+      const SG = V.stainMesh.geometry, SV = SG.attributes.position.count / 96;
+      const slots = (from) => { const P = SG.attributes.position, I = SG.attributes.aInfo, out = [];
+        for (let s = 0; s < 96; s++) { const v = []; for (let k = 0; k < SV; k++) { const o = s * SV + k; if (I.getZ(o) < 0) continue; v.push(new T.Vector3(P.getX(o), P.getY(o), P.getZ(o))); }
+          if (v.length && I.getX(s * SV) >= from) out.push({ slot: s, landed: I.getX(s * SV), v, c: v.reduce((m, q) => m.add(q), new T.Vector3()).divideScalar(v.length) }); }
+        return out; };
+      // how much of those slots still shows, seen from straight above (the stain mesh alone, only those slots drawn)
+      const top = new T.PerspectiveCamera(60, PW / PH, 0.5, 60);
+      const coverage = (sl, over) => { if (!sl.length) return 0; top.position.copy(over).add(new T.Vector3(0, 14, 0)); top.up.set(0, 0, -1); top.lookAt(over); top.updateMatrixWorld(true);
+        let n = 0; for (const s of sl) { SG.setDrawRange(s.slot * SV, SV); const f = shot([V.stainMesh], top); for (let i = 0; i < PW * PH; i++) if (f[i * 4 + 3] > 0.5) n++; }
+        SG.setDrawRange(0, Infinity); return n; };
+      const tipNow = () => G.ronin.sword.userData.tip.getWorldPosition(new T.Vector3());
+
+      // one cut, watched frame by frame for `ms` (each tick runs after the game's own frame)
+      const cutAndWatch = async (b, hp, ms, dry) => {
+        const p0 = G.ronin.root.position; G.facing = Math.atan2(-1, 0);
+        if (b) { put(b, p0.x - 2.2, p0.z); b.hp = hp; }
+        await wait(350); G.facing = Math.atan2(-1, 0); G.pc.strike = null;
+        const o = { blot: null, arc: null, drops: new Map(), chiburi: null, c0: null, cover: [], travel: null, frames: 0 };
+        let prevTip = tipNow(); const clk0 = V.clock.t;
+        G.strike(0); const arc = G.pc.strike.arc;
+        await new Promise((ok) => { const t0 = performance.now(); const tick = () => {
+          const now = performance.now(), clk = V.clock.t, tp = tipNow(); o.frames++;
+          // the contact: the first frame of the blot or of the cut's own drops (the same frame in a sound game; either alone if one is broken)
+          if (o.c0 === null && b && (V.blot.visible || V.drops.some((d) => !d.cast && !o.drops.has(d)))) {
+            // the STROKE's own travel at the cut: its outer edge (it runs past the tip) either side of where the blade met him, in the world
+            o.c0 = clk; arc.m.updateMatrixWorld(true); { const P = arc.m.geometry.attributes.position, j = arc.cutAt, e = (k) => new T.Vector3().fromBufferAttribute(P, 2 * k + 1).applyMatrix4(arc.m.matrixWorld);
+              o.travel = e(Math.min(j + 1, P.count / 2 - 1)).sub(e(Math.max(j - 1, 0))).normalize(); }
+          }
+          if (V.blot.visible && !o.blot && !b) o.blot = { miss: true, at: clk, real: now };   // a blot on a cut in the air: the defect itself
+          else if (V.blot.visible && !o.blot) {                                       // W16: the blot's first frame
+            const full = shot(null); V.blot.visible = false; const bare = shot(null); V.blot.visible = true;
+            const mask = shot(meshesOf(b.root)), during = crimson(shot([arc.m]));
+            let inside = 0, inN = 0, changed = 0;
+            for (let i = 0; i < PW * PH; i++) { const dl = Math.abs(lum(full, i) - lum(bare, i)); if (mask[i * 4 + 3] > 0.5) { inN++; inside += dl; } else if (dl > 0.04) changed++; }
+            const feet = b.root.position.clone(), sF = feet.clone().project(G.camera), sH = feet.clone().setY(feet.y + b.standH).project(G.camera), hPx = Math.abs(sH.y - sF.y) * PH / 2;
+            o.blot = { at: clk, real: now, insideDiff: +(inN ? inside / inN : 0).toFixed(4), inN, area: +(changed / (PW * PH)).toFixed(3), ratio: +(Math.sqrt(changed / Math.PI) / Math.max(1, hPx)).toFixed(2), arcLum: during.lum, arcN: during.n };
+          }
+          if (o.blot && o.blot.hid === undefined && !V.blot.visible) { o.blot.hid = +(clk - o.blot.at).toFixed(3); o.blot.hidReal = +((now - o.blot.real) / 1000).toFixed(3); }
+          if (!o.c0 && V.drops.length && !b) o.c0 = clk;                              // (a miss has no blot to start its clock)
+          if (!o.arc && arc.m.material.uniforms.progress.value >= 1 && arc.m.material.uniforms.paper.value === 0) {   // W19: the stroke fully laid
+            o.arc = { all: crimson(shot([arc.m])), inner: half(arc, 'inner'), outer: half(arc, 'outer') };
+          }
+          for (const d of V.drops) {                                                   // W17 · W18: every drop, from its birth to its landing
+            if (!o.drops.has(d)) o.drops.set(d, { born: clk, from: d.from.clone(), v0: d.v.clone(), tone: d.tone, cast: d.cast, tipD: d.cast ? +d.from.distanceTo(tp).toFixed(3) : null, last: [d.p.clone(), d.p.clone()], gone: null });
+            else { const s = o.drops.get(d); s.last = [s.last[1], d.p.clone()]; }
+          }
+          for (const [d, s] of o.drops) if (s.gone === null && !V.drops.includes(d)) s.gone = clk;
+          if (!o.chiburi && G.ronin.current && G.ronin.current.getClip().name === G.CHIBURI.clip) o.chiburi = { at: clk };
+          if (o.c0 !== null) for (const [k, at] of dry.entries()) if (o.cover[k] === undefined && clk - o.c0 >= at) {   // W17: still there, then dried
+            const sl = slots(o.c0).filter((q) => [...o.drops.values()].some((s) => !s.cast && s.gone !== null && Math.abs(s.gone - q.landed) < 1e-6 && q.c.distanceTo(s.last[1]) < 0.6));
+            o.cover[k] = { at, slots: sl.length, px: coverage(sl, G.ronin.root.position) };
+          }
+          prevTip = tp;
+          if (now - t0 < ms) requestAnimationFrame(tick); else ok(); }; requestAnimationFrame(tick); });
+        // after the watch: what landed where, read off the stain mesh's own buffer
+        const drops = [...o.drops.values()], born = drops.filter((s) => !s.cast), cast = drops.filter((s) => s.cast);
+        const all = slots(clk0), match = (s) => all.find((q) => Math.abs(q.landed - s.gone) < 1e-6 && q.c.distanceTo(s.last[1]) < 0.6);
+        const fwd = o.travel ? born.filter((s) => s.v0.clone().normalize().dot(o.travel) > 0) : [];
+        const lift = Math.max(0, ...all.flatMap((q) => q.v.map((v) => Math.abs(v.y - surface(v.x, v.z)))));
+        // a stain's own shape against its drop's last flight: its length along the travel over its width across, against 1/sin α
+        const shape = (s) => { const q = match(s); if (!q) return null; const vel = s.last[1].clone().sub(s.last[0]); const n = G.land.normal(q.c.x, q.c.z, new T.Vector3());
+          const along = vel.clone().addScaledVector(n, -vel.dot(n)); if (along.lengthSq() < 1e-10) return null; along.normalize(); const across = new T.Vector3().crossVectors(n, along);
+          const ext = (dir) => { const xs = q.v.map((v) => v.dot(dir)); return Math.max(...xs) - Math.min(...xs); };
+          const sinA = Math.min(1, Math.max(0.25, Math.abs(vel.dot(n)) / Math.max(vel.length(), 1e-9)));
+          return { LW: +(ext(along) / Math.max(1e-6, ext(across))).toFixed(3), want: +(1 / sinA).toFixed(3) }; };
+        const castSt = cast.map((s) => ({ s, q: match(s) })).filter((x) => x.q);
+        let line = null;
+        if (castSt.length >= 2) {                                                        // W18: the cast stains in a line (a least-squares line in plan)
+          const P = castSt.map((x) => x.q.c), m = P.reduce((a, q) => a.add(q), new T.Vector3()).divideScalar(P.length);
+          let sxx = 0, sxz = 0, szz = 0; for (const q of P) { const dx = q.x - m.x, dz = q.z - m.z; sxx += dx * dx; sxz += dx * dz; szz += dz * dz; }
+          const th = 0.5 * Math.atan2(2 * sxz, sxx - szz), u = new T.Vector2(Math.cos(th), Math.sin(th));
+          const along = P.map((q) => (q.x - m.x) * u.x + (q.z - m.z) * u.y), off = P.map((q) => Math.abs(-(q.x - m.x) * u.y + (q.z - m.z) * u.x));
+          line = { n: P.length, off: +Math.max(...off).toFixed(3), spread: +(Math.max(...along) - Math.min(...along)).toFixed(3) };
+        }
+        return { blot: o.blot, arc: o.arc, chiburi: o.chiburi && o.c0 !== null ? +(o.chiburi.at - o.c0).toFixed(3) : (o.chiburi ? 'played' : null), cover: o.cover, frames: o.frames,
+          born: born.length, fwd: fwd.length, fwdCrimson: fwd.filter((s) => s.tone === 1).length, back: born.length - fwd.length, backInk: born.filter((s) => !fwd.includes(s) && s.tone === 0).length,
+          maxAngle: o.travel && fwd.length ? +Math.max(...fwd.map((s) => s.v0.angleTo(o.travel))).toFixed(3) : null,
+          landed: born.filter((s) => s.gone !== null).length, stained: born.filter((s) => match(s)).length, lift: +lift.toFixed(4),
+          cast: cast.length, castTip: cast.length ? Math.max(...cast.map((s) => s.tipD)) : null, castAt: cast.length && o.c0 !== null ? +(Math.min(...cast.map((s) => s.born)) - o.c0).toFixed(3) : null,
+          castStained: castSt.length, line, castShape: castSt.map((x) => shape(x.s)).filter(Boolean), dead: b ? !!b.dead : null };
+      };
+      const miss = await cutAndWatch(null, 0, 2800, []);
+      const wound = await cutAndWatch(camp[0], 99, 4200, [1.2, 2.35]); away(camp[0]); await wait(400);
+      const death = await cutAndWatch(camp[1], 1, 3300, [2.0, 2.95]);
+      return { miss, wound, death };
+    });
+    const { miss: m, wound: w, death: d } = r, E = errors.length ? ' · page errors: ' + errors.slice(0, 2).join(' | ') : '';
+    const blotOk = (x) => x.blot && x.blot.hid >= 0.06 && x.blot.hid <= 0.2 && x.blot.hidReal >= 0.1 && x.blot.insideDiff <= 0.01 && x.blot.area >= 0.05 && x.blot.ratio >= 0.6 && x.blot.ratio <= 1.6 && x.blot.arcLum >= 0.55;
+    const bd = (x) => x.blot ? `shown ${x.blot.hid} s of game time, ${x.blot.hidReal} s on the clock (held through the hit-stop), ${(x.blot.area * 100).toFixed(0)} % of the frame, its reach ${x.blot.ratio}× his height, his own pixels changed ${x.blot.insideDiff} (behind him), the stroke ${x.blot.arcLum} light (bare paper)` : 'NO BLOT';
+    wall('W16 the blot', !m.blot && blockBlots === 0 && blotOk(w) && blotOk(d) && !errors.length,
+      `a wound: ${bd(w)} · a kill: ${d.blot ? 'shown ' + d.blot.hid + ' s, his own pixels changed ' + d.blot.insideDiff : 'NO BLOT'} · a cut in the air: ${m.blot ? 'A BLOT' : 'none'} · a blocked cut: ${blockBlots === null ? 'not measured' : blockBlots ? 'A BLOT' : 'none'}${E}`);
+    const dried = (x) => x.cover[0] && x.cover[1] && x.cover[0].px > 0 && x.cover[1].slots === x.born && x.cover[1].px === 0;   // showing, then every one landed and dried
+    wall('W17 the flecks', m.born === 0 && w.born === 12 && w.fwd === 9 && w.fwdCrimson === 4 && w.back === 3 && w.backInk === 3 && d.fwd === 14 && d.fwdCrimson === 10 && w.maxAngle !== null && w.maxAngle <= 0.75
+      && w.landed === 12 && w.stained === 12 && d.stained === d.born && w.lift <= 0.01 && d.lift <= 0.01 && dried(w) && dried(d) && !errors.length,
+      `a wound: ${w.fwd} along the stroke (${w.fwdCrimson} crimson, ${w.fwd - w.fwdCrimson} ink, within ${w.maxAngle} rad of its travel) and ${w.back} back (${w.backInk} ink); ${w.stained}/${w.landed} landed as stains, `
+      + `the farthest ${w.lift} m off the terrain's own triangles; ${w.cover[0] ? w.cover[0].px + ' px of ' + w.cover[0].slots : '—'} at ${w.cover[0] ? w.cover[0].at : '—'} s, ${w.cover[1] ? w.cover[1].px + ' px of ' + w.cover[1].slots : '—'} at ${w.cover[1] ? w.cover[1].at : '—'} s (dried) · a kill: ${d.fwd} (${d.fwdCrimson} crimson), `
+      + `${d.stained}/${d.born} stains, ${d.cover[0] ? d.cover[0].px + ' px of ' + d.cover[0].slots : '—'} at 2 s, ${d.cover[1] ? d.cover[1].px + ' px of ' + d.cover[1].slots : '—'} at 2.95 s · a cut in the air: ${m.born} drops${E}`);
+    const shapeOk = (x) => x.castShape.length >= 3 && x.castShape.every((q) => Math.abs(q.LW / q.want - 1) <= 0.12);
+    wall('W18 the chiburi', m.chiburi === null && m.cast === 0 && typeof w.chiburi === 'number' && w.cast === 4 && w.castTip !== null && w.castTip <= 0.15 && w.castAt >= 1.0 && w.castAt <= 1.6
+      && w.line && w.line.n === 4 && w.line.off <= 0.15 && w.line.spread >= 0.25 && shapeOk(w) && !errors.length,
+      `after a wound, standing: Sword_Regular_A_Rec at ${w.chiburi} s, ${w.cast} crimson drops off the REAL tip (${w.castTip} m from it) at ${w.castAt} s after the cut, landing ${w.line ? `in a line: ${w.line.n} stains, ${w.line.off} m off it at most, ${w.line.spread} m along it` : 'NOT in a line'}; `
+      + `each stain's length ÷ width against 1/sin α: ${w.castShape.map((q) => q.LW + '/' + q.want).join(', ')} · after a cut in the air: ${m.chiburi === null ? 'no flick' : 'A FLICK'}${E}`);
+    const a = (x) => x.arc ? x.arc.all.share : null;
+    wall('W19 the crimson', m.arc && w.arc && d.arc && m.arc.all.n >= 50 && a(m) <= 0.02 && a(w) >= 0.05 && w.arc.inner.share >= 2 * w.arc.outer.share && a(d) >= 0.3 && a(d) >= 1.5 * a(w) && !errors.length,
+      `the stroke's own pixels in crimson: a cut in the air ${a(m)} (none) · a wound ${a(w)}, its inner half ${w.arc ? w.arc.inner.share : '—'} against its outer ${w.arc ? w.arc.outer.share : '—'} · a kill ${a(d)} (flooded)${E}`);
+    await page.close();
+  }
+
   // W13: the camera keeps clear of the smoke
-  {
+  if (want('W13')) {
     const { page, errors } = await open('test');
     const r = await page.evaluate(async () => {
       const G = window.__GAME, wait = (ms) => new Promise((ok) => setTimeout(ok, ms)); G.pc.invuln = 99;
@@ -306,11 +470,13 @@ async function open(query, viewport = { width: 960, height: 540 }) {
   }
 
   // W5: memory at a phone's size
+  if (want('W5')) {
   const ph = await open('', { width: 390, height: 844 });
   await ph.page.waitForTimeout(1500);
   const mem = await ph.page.evaluate(() => window.__STACK_MEMORY);
   wall('W5 phone', mem && mem.totalMB < 192, mem ? `${mem.totalMB.toFixed(0)} MB (${Object.entries(mem).filter(([k]) => k !== 'totalMB').map(([k, v]) => k + ' ' + Math.round(v)).join(', ')})` : 'no report');
   await ph.page.close();
+  }
 }
 
 await browser.close(); server.close();

@@ -4,6 +4,7 @@
   "license": "MIT",
   "by": "Ricardo Cabello (mrdoob) and the three.js authors",
   "home": "https://github.com/mrdoob/three.js",
+  "contains": [],
   "packages": [
     {
       "name": "three",
@@ -42,14 +43,14 @@
       "sha256": "34121b60a3bd9adc004a5a637f6135e9d2b72757eeb9e476ae1988fe2db6a9fb",
       "from": "three@0.187.0"
     },
-    "addons/lines/LineMaterial.js": {
-      "bytes": 14529,
-      "sha256": "5f4ba22891c54d50a51e8bab6c648399e919e6832c0d03060fbe1ec7c771a93f",
-      "from": "three@0.187.0"
-    },
     "addons/lines/LineSegments2.js": {
       "bytes": 11477,
       "sha256": "fcbc20f576e88343cea12131f49b7003d7ab44ede422fcb694e567456022f7a0",
+      "from": "three@0.187.0"
+    },
+    "addons/lines/LineMaterial.js": {
+      "bytes": 14529,
+      "sha256": "5f4ba22891c54d50a51e8bab6c648399e919e6832c0d03060fbe1ec7c771a93f",
       "from": "three@0.187.0"
     },
     "addons/lines/LineSegmentsGeometry.js": {
@@ -60,6 +61,11 @@
     "addons/postprocessing/Pass.js": {
       "bytes": 4218,
       "sha256": "444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5",
+      "from": "three@0.187.0"
+    },
+    "addons/geometries/DecalGeometry.js": {
+      "bytes": 10100,
+      "sha256": "6b2da6ea840926dfb0278841f96067c02964c73644c7f189720e89fe9baa2b10",
       "from": "three@0.187.0"
     },
     "LICENSE.txt": {

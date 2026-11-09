@@ -169,7 +169,27 @@ He watched the reveal and wrote four notes. Each became a measured rule with its
   - an ensō crest brushed with the same stroke;
   - a wave that runs downwind from the pole.
 
-## 8. The walls (`examples/painted-ronin/tests/walls.mjs`, `tests/paint.mjs`)
+## 8. The ink cut's beats, painted (8 Nov, evening)
+The pixelfx skill turned this game's slash into a pixel "ink cut" that added three beats: an ink blot at contact with the stroke bare
+paper, flecks that land as stains, and the blade flicked clean. On the owner's word they came back into the game, painted in its own
+language. The references were read before any code (the receipts' `2026-11-09_pixelfx/painted_ronin/RESEARCH.md`):
+- **The blot** is a shock frame. Sakuga Booru: "Special frames drawn by animators that appear for a split second, often added to make an
+  impact more pronounced". It is splashed ink (Sesshū's hatsuboku) from the one atlas: MyPaint's ragged mass and 12 small dabs off its rim
+  (Worthington: a splash's rim splits into drops). It is drawn over the world and behind the fighters by render order, and held through
+  the hit-stop on the game's clock (Sakurai: "both parties momentarily freeze").
+- **The flecks** fly under gravity and air drag (the NIJ report on bloodstains: C_D = 0.28 + 6/√Re + 21/Re). Ghost of Tsushima's
+  droplets "land on nearby geometry", and here each lands as three.js's `DecalGeometry` on only the terrain cells under it (the whole
+  terrain would stall a phone). It is stretched by 1/sin α and dries away by erosion.
+- **The chiburi**: no CC0 library has one, so it is Quaternius's authored `Sword_Regular_A_Rec`, whose arc is o-chiburi's. It plays when he
+  stands after a cut that drew blood ("an automatic one if you're standing around": Ghost of Tsushima's art director), and 4 crimson
+  drops leave the real blade tip (cast-off and cessation, in ASB TR 033's terms).
+- **The pressure, checked:** a cut in the air now shows no crimson. A kill's "flood" was a 75 % mix that read pink, so it is now a true
+  crimson flood (W19).
+
+*Found on the way:* `vfx.js` already had a local `N` (the trail's 14), which shadowed the terrain's `N`, so every stain projected onto the
+grid's corner and came out empty. The blot first counted the contact frame's own time slice, so WebKit showed a kill's blot for 0.056 s.
+
+## 9. The walls (`examples/painted-ronin/tests/walls.mjs`, `tests/paint.mjs`)
 Each wall is a measurement of the running game, in Chromium and in WebKit, proven red by a planted defect:
 
 | Wall | Holds | Planted defect → red |
@@ -186,6 +206,10 @@ Each wall is a measurement of the running game, in Chromium and in WebKit, prove
 | W14 the guard | a bandit facing the ronin with his guard up blocks a sideways cut | `guardpush`: judged from the push, never blocked |
 | W15 the chain | a press made after a clash chains into the next cut | `dropchain`: the press dropped |
 | W12 the press | a cut that wounds ≥ 1.6× a cut in the air, one that kills ≥ 2.6× and lingers ≥ 1.2 s; 閃's ink ≥ 1.8× over a death | `nopress`: all 0.133 m |
+| W16 the blot | a cut that wounds or kills shows an ink blot behind the fighters for 0.07 s of game time (held through the hit-stop), reaching about his height, the stroke bare paper meanwhile; none on a miss or a block | `noblot` · `blotfront`: his own pixels change · `paperoff`: the stroke 0.35 light |
+| W17 the flecks | a wound flings 9 drops along the stroke (4 crimson) and 3 back, a kill 14 (10 crimson); each lands as a stain on the terrain's own triangles and dries away by 2.35 s; none on a miss | `nostains` · `floatstains`: 0.25 m up · `nodry` · `missflecks` |
+| W18 the chiburi | standing after a wound, Sword_Regular_A_Rec flicks 4 crimson drops off the real tip ~1.25 s after the cut, landing in a line, each stain stretched by 1/sin α; no flick after a miss | `nochiburi` · `chiburimiss` |
+| W19 the crimson | the stroke's own pixels: no crimson in the air, crimson along the inner side of a wound, flooded on a kill | `misscrimson`: 0.45 crimson in the air |
 
 The painted language has its own walls (`tests/paint.mjs`), measured on the materials the game builds and the pixels it draws:
 
