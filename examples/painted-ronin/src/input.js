@@ -4,6 +4,7 @@
 // screen (its direction is the line, its lift the cut — MGR's stick "from the outside to the center … will cause Raiden to slice"), or on a
 // computer a drag of the locked mouse (the brush's tip moves with the mouse; press, draw, let go). A tap on 筆 opens it until a second
 // tap, a hold keeps it while held.
+const PLANT_IN = new URLSearchParams(location.search).get('plant');   // plant brushstick: the left 45 % stays the stick in the brush
 export function createInput(root, { plant = null } = {}) {
   const s = { mx: 0, my: 0, run: false, look: { dx: 0, dy: 0 }, edges: new Set(), ups: new Set(), held: new Set(), touch: false, brush: false,
     stroke: { down: false, x0: 0, y0: 0, x: 0, y: 0, ended: false }, cur: { x: innerWidth / 2, y: innerHeight * 0.45, moved: false } };
@@ -53,7 +54,10 @@ export function createInput(root, { plant = null } = {}) {
   canvas.addEventListener('touchstart', (e) => {
     touchOn();
     for (const t of e.changedTouches) {
-      if (t.clientX < innerWidth * 0.45 && stickId === null) { stickId = t.identifier; sx = t.clientX; sy = t.clientY; stick.style.left = sx + 'px'; stick.style.top = sy + 'px'; stick.classList.add('on'); }
+      // in the brush the stick keeps only the bottom-left corner and the rest of the screen is the canvas, so a stroke can be drawn across a
+      // bandit anywhere he stands (the chain: on a phone the left 45 % was the stick and a stroke begun there walked him); outside it, the left 45 %
+      const stickZone = s.brush && PLANT_IN !== 'brushstick' ? t.clientX < innerWidth * 0.35 && t.clientY > innerHeight * 0.55 : t.clientX < innerWidth * 0.45;
+      if (stickZone && stickId === null) { stickId = t.identifier; sx = t.clientX; sy = t.clientY; stick.style.left = sx + 'px'; stick.style.top = sy + 'px'; stick.classList.add('on'); }
       else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; if (s.brush) strokeAt(lx, ly); }
     }
     e.preventDefault();

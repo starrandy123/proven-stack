@@ -16,7 +16,8 @@ import { createNavigation, terrainPatch } from './navigation.js';
 import { Bandits } from './enemies.js';
 import { createVfx } from './vfx.js';
 import { startAudio, updateAudio, play as sfx, setHush } from './audio.js';
-import { createBrush } from './blade.js';
+import { createBrush, BRUSH as BRUSH_K } from './blade.js';
+import { markPlane } from './chain.js';
 import { createAlign } from './align.js';
 import { createBirds, createClouds, swayLeaves } from './life.js';
 import { loadPaint, paint, paintFogAll, paintSurface, measureHorizon, paintMemoryMB, PALETTE, RAMP, WIND } from './paint.js';
@@ -206,10 +207,10 @@ function strikeTarget(dash) {
   return lock.update(pos, new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)), false, bandits.alive());
 }
 const reachOf = (C) => Math.hypot(C.off, C.reach) * (PLANT === 'reach' ? 1.7 : 0.92);
-function strike(i, def) {
+function strike(i, def, forced = null) {
   let s = def || COMBO[i]; pc.queued = false; pc.chiburi = null; hold = false;
   if (PLANT === 'chiburimiss') blood = { t: time };                    // plant: every swing wets the blade, a miss too
-  const target = strikeTarget(s === DASH_STRIKE);
+  const target = forced && !forced.dead ? forced : strikeTarget(s === DASH_STRIKE);   // the chain hands a strike its marked bandit
   let C = contactOf(s.clip), reach = reachOf(C), air = null;
   const to = target ? new THREE.Vector3().subVectors(target.root.position, pos).setY(0) : null;
   const oldLeap = PLANT === 'frog' || PLANT === 'strideleap';
@@ -232,27 +233,28 @@ function strike(i, def) {
   }
   const dash = air && air.kind === 'dash';
   // the dash's clock: the clip's own wind-in, the step stretched over the flight, then the clip at its speed to the cut and on
-  const impact = dash ? air.tA + air.T + (C.t - air.tau1) / s.speed : C.t / s.speed;
+  const at0 = dash ? 0 : (s.at || 0), impact = dash ? air.tA + air.T + (C.t - air.tau1) / s.speed : (C.t - at0) / s.speed;   // a chain's cut starts at its wind-up, as the brush's
   // the clip's end: a press buffered during it still chains (Sword_Regular_A ends 0.41 s in, before a blocked or missed cut's window at
   // impact + 0.2 s: the buffered cut was dropped and no combo could go on past a block — found 8 Nov rehearsing the showcase's clash)
   const onEnd = () => { const st = pc.strike; if (!st || st.def !== s) return; if (pc.queued && st.i >= 0 && st.i < 2 && PLANT !== 'dropchain') st.ended = true; else { pc.strike = null; hold = !!blood; } };
   const a = air && air.kind === 'leap'
     ? (PLANT === 'frog' ? ronin.playSplit(s.clip, 'NinjaJump_Start', { upperSpeed: s.speed, lowerSpeed: 1.5, fade: 0.06 })
       : ronin.playSplit(s.clip, 'spear-thrust', { upperSpeed: s.speed, lowerSpeed: 0.3, lowerAt: 0.42, fade: 0.06 }))
-    : ronin.play(s.clip, { loop: false, fade: 0.06, speed: dash ? 0 : s.speed, onEnd });     // the dash's clip time is set frame by frame until it lands
+    : ronin.play(s.clip, { loop: false, fade: 0.06, speed: dash ? 0 : s.speed, at: at0, onEnd });     // the dash's clip time is set frame by frame until it lands
   let lunge = 0;
   if (to) {                                                             // turn so the blade's contact point lies on the target, then close to it
-    const face = Math.atan2(to.x, to.z) - Math.atan2(C.off, C.reach);
+    const TC = s.takedown && align.turnedContact(s.clip, facing, pos), face = Math.atan2(to.x, to.z) - (TC ? Math.atan2(TC.off, TC.reach) : Math.atan2(C.off, C.reach));
     if (dash) air.face = face; else facing = face;                      // the dash turns on its planted foot instead of snapping round
     lunge = Math.min(PLANT === 'slide' ? 12 : 5, Math.max(0, to.length() - reach) / Math.max(0.08, impact));
   } else if (s === DASH_STRIKE) lunge = 9;
-  const dur = dash ? air.tA + air.T + (a.getClip().duration - air.tau1) / s.speed : a.getClip().duration / s.speed;
+  const dur = dash ? air.tA + air.T + (a.getClip().duration - air.tau1) / s.speed : (a.getClip().duration - at0) / s.speed;
   pc.strike = { i, def: s, t: 0, dur, impact, contact: C, reach, hit: false, landed: false, lunge, target, air, lift: 0, groundSlide: 0, act: a };
   pc.strike.arc = vfx.slashArc(ronin, s.clip, s.speed, impact, s.power > 1);
   sfx(s.power > 1 ? 'heavy' : 'swing');
 }
 bandits.onBlow = (b, dir, kind) => {
-  if (!pc.alive || pc.invuln > 0) return;                                // a dodge's first 233 ms: the blow passes through (For Honor)
+  if (!pc.alive || pc.invuln > 0 || brush.active || chain) return;      // a dodge's first 233 ms: the blow passes through (For Honor); none lands in the
+                                                                         // brush or the chain (Red Dead's Dead Eye: the hero is safe while he marks)
   const toB = new THREE.Vector3().subVectors(b.root.position, pos).setY(0).normalize();
   const facingV = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   if (pc.strike && facingV.dot(toB) > 0.6 && pc.strike.t < pc.strike.impact + 0.05) {   // blades meet: a parry
@@ -387,6 +389,78 @@ const brush = await createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx, 
 // the brush's line is a shader of its own: compiled now, at boot, so the first held moment never waits on it (WebKit compiles in the frame
 // that first draws it: B3 read the clock 0.479 s late and B15 an unsettled grade on the first open)
 brush.line.visible = true; renderer.compile(brush.line, camera, scene); brush.line.visible = false;
+
+// THE CHAIN (research L §5-§6 C; the owner, 9 Nov: "I want to do it to enemies and dash to them too like the fear takedown in Arkham
+// knight", and on take 6: "where's the clip of me doing it in slow mo to multiple enemies?"). When the brush closes on marks (blade.js: a
+// stroke drawn across a bandit marks him, an ink pot each, three at most) the ronin takes them IN THE ORDER MARKED (ours: no game publishes
+// its order, research G): the game's own dash attack to each (strike, him its target, over the lock), at its landing the cut his mark names
+// (the brush's own clips, started at their wind-up), aligned to his plane (align.js; markPlane holds the ronin's approach rolled by the
+// marked angle), his death through the game's own path, then a held beat and the next. The clock: SLOW MOTION through each takedown (his
+// word; ours: the world and he at 0.35) and HELD in the beat between (Arkham's choose beats, 0.25-0.7 s near-still: research L §5; ours 0.4 s
+// at the brush's 0.05). The camera never cuts (Arkham's chain is one moving shot): over his right shoulder on the line to each target, eased.
+const CHAIN_RUN = { slow: PLANT === 'chslowstuck' ? 1 : 0.35, beat: PLANT === 'chnobeat' ? 0 : 0.4, held: 0.05, tau: 0.06, cam: { back: 3.4, right: 2.0, height: 2.0, tau: 0.25 } };
+let chain = null, chainScale = 1, chainBack = null;
+const shoulderAt = () => new THREE.Vector3(pos.x - Math.cos(facing) * 0.2, pos.y + 1.42, pos.z + Math.sin(facing) * 0.2);
+function cutStrike(m) {
+  const cut = brush.cutOf(m.theta), C = contactOf(cut.clip);
+  chain.plane = markPlane(m.b, m.theta, shoulderAt());
+  align.aim(chain.plane.n, cut.clip, facing);
+  strike(-1, { clip: cut.clip, power: 1, speed: BRUSH_K.swingRate, at: Math.max(0, C.t - BRUSH_K.lead), takedown: true }, PLANT === 'chlock' ? null : m.b);
+}
+function chainStep(realDt) {
+  if (!chain && !brush.active && brush.marks && brush.marks.count && pc.alive && !pc.strike) {
+    chain = { list: brush.marks.take(), k: 0, phase: 'go', t: 0, log: [], saved: brush.S.saved ? { ...brush.S.saved } : { dist: cam.dist, pitch: cam.pitch } };
+    if (PLANT === 'chnear') chain.list.sort((a, b) => a.b.root.position.distanceTo(pos) - b.b.root.position.distanceTo(pos));
+    window.__chainLog = chain.log; (window.__chainLogs = window.__chainLogs || []).push(chain.log);   // every chain's log (a second one is read, not hidden)
+  }
+  brush.S.camTaken = !!chain;                                            // the brush lets the camera go while the chain holds it
+  let want = 1;
+  if (chain) {
+    chain.t += realDt;
+    const m = chain.list[chain.k];
+    if (!m) { chainBack = chain.saved; chain.log.push({ kind: 'end', at: time }); chain = null; }
+    else if (chain.phase === 'go') {
+      if (m.b.dead) { brush.marks.drop(m.b); chain.k++; }
+      else {
+        const C = contactOf(brush.cutOf(m.theta).clip), to = new THREE.Vector3().subVectors(m.b.root.position, pos).setY(0); chain.t = 0;
+        if (to.length() - reachOf(C) > STEP_GAP) { strike(-1, DASH_STRIKE, PLANT === 'chlock' ? null : m.b); chain.phase = 'dash'; } else { cutStrike(m); chain.phase = 'cut'; }
+        chain.log.push({ kind: 'go', k: chain.k, b: m.b, at: time, dash: chain.phase === 'dash' });
+      }
+    } else if (chain.phase === 'dash') { if (!pc.strike || !pc.strike.air || pc.strike.air.landed) { cutStrike(m); chain.phase = 'cut'; chain.t = 0; } }
+    else if (chain.phase === 'cut') {
+      const st = pc.strike;
+      if (st && st.def.takedown && chain.plane) align.aim(chain.plane.n, st.def.clip, facing);
+      // the cut runs THROUGH its impact before the beat holds the world (ended on the blow's registration, 0.05 s of strike time before it,
+      // the beat froze the blade short of him and the next dash took it away: C3 read 1 of 3 impacts)
+      if (!st || !st.def.takedown || st.t > st.impact + 0.06) {
+        chain.log.push({ kind: 'taken', k: chain.k, b: m.b, dead: m.b.dead, at: time }); brush.marks.drop(m.b); align.letGo();
+        chain.phase = chain.k + 1 < chain.list.length ? 'beat' : 'last'; chain.t = 0;
+      }
+    } else if (chain.phase === 'beat') { if (chain.t >= CHAIN_RUN.beat) { chain.k++; chain.phase = 'go'; } }
+    else if (chain.phase === 'last') { if (chain.t >= 0.3) chain.k = chain.list.length; }
+    if (chain) want = chain.phase === 'beat' ? CHAIN_RUN.held : CHAIN_RUN.slow;
+  }
+  chainScale += (want - chainScale) * (1 - Math.exp(-realDt / CHAIN_RUN.tau)); if (want === 1 && Math.abs(chainScale - 1) < 1e-3) chainScale = 1;
+}
+// the chain's camera, through cam alone: over his right shoulder on the line to the bandit he is taking, both in the shot, eased (never a cut);
+// after the chain, the follow camera's own distance and height come back (C6)
+function chainCamera(realDt) {
+  const b = chain.list[chain.k].b, fw = new THREE.Vector3().subVectors(b.root.position, pos).setY(0); if (fw.lengthSq() < 1e-6) fw.set(Math.sin(facing), 0, Math.cos(facing)); fw.normalize();
+  const rt = new THREE.Vector3(-fw.z, 0, fw.x), eyeOn = (side) => pos.clone().addScaledVector(fw, -CHAIN_RUN.cam.back).addScaledVector(rt, CHAIN_RUN.cam.right * side);
+  // the shoulder clear of the others: the side whose eye stands farther from every other standing bandit, chosen once a takedown (the first
+  // take sat over the right shoulder beside a marked bandit, his head a third of the frame); plant chcamstuck keeps the right
+  if (chain.sideFor !== chain.k) { chain.sideFor = chain.k; const room = (side) => { const e = eyeOn(side); let m = 1e9; for (const o of bandits.alive()) if (o !== b) m = Math.min(m, Math.hypot(o.root.position.x - e.x, o.root.position.z - e.z)); return m; };
+    chain.side = PLANT === 'chcamstuck' || room(1) >= room(-1) ? 1 : -1; }
+  const eye = eyeOn(chain.side); eye.y = pos.y + CHAIN_RUN.cam.height;
+  const look = pos.clone().add(new THREE.Vector3(0, 1.3, 0)).lerp(b.root.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0.5);
+  const o = eye.sub(look), dist = o.length(), yaw = Math.atan2(o.x, o.z), pitch = Math.asin(THREE.MathUtils.clamp(o.y / dist, -1, 1)), k = 1 - Math.exp(-realDt / CHAIN_RUN.cam.tau);
+  cam.target.lerp(look, k); cam.yaw += Math.atan2(Math.sin(yaw - cam.yaw), Math.cos(yaw - cam.yaw)) * k; cam.pitch += (pitch - cam.pitch) * k; cam.dist += (dist - cam.dist) * k;
+}
+function chainCameraBack(realDt) {
+  if (chain || !chainBack || PLANT === 'chcamstuck') return; const k = 1 - Math.exp(-realDt / 0.15);
+  cam.dist += (chainBack.dist - cam.dist) * k; cam.pitch += (chainBack.pitch - cam.pitch) * k;
+  if (Math.abs(cam.dist - chainBack.dist) < 0.005 && Math.abs(cam.pitch - chainBack.pitch) < 0.001) { cam.dist = chainBack.dist; cam.pitch = chainBack.pitch; chainBack = null; }
+}
 const STEP = 1 / 60;
 
 function frame(now) {
@@ -395,9 +469,10 @@ function frame(now) {
   // 筆 the brush reads its own input first (the button, the stroke, the steps round its focus); while it holds the moment, or its swing
   // runs, the ronin's other actions wait. It holds the world's clock to 0.05 (brush.timeScale is exactly 1 when it is closed)
   brush.frame(realDt, inp, me); input.setBrush(brush.active);
-  if (brush.holdsBody) { inp.mx = inp.my = 0; inp.run = false; inp.strike = inp.roll = inp.dash = inp.storm = inp.jump = false; }
+  chainStep(realDt);
+  if (brush.holdsBody || chain) { inp.mx = inp.my = 0; inp.run = false; inp.strike = inp.roll = inp.dash = inp.storm = inp.jump = false; }
   freeze = Math.max(0, freeze - realDt); slow = Math.max(0, slow - realDt);
-  const dt = freeze > 0 ? 0 : realDt * (slow > 0 ? 0.3 : 1) * brush.timeScale;   // hit-stop holds the world; slow motion runs it at 0.3x; the camera stays real-time
+  const dt = freeze > 0 ? 0 : realDt * (slow > 0 ? 0.3 : 1) * brush.timeScale * chainScale;   // the chain: slow through a takedown, held in its beat   // hit-stop holds the world; slow motion runs it at 0.3x; the camera stays real-time
   // Sky.js's clock counts SECONDS (three.js's own example: performance.now() * 0.001); fed milliseconds (until 8 Nov) its cloud sheet
   // drifted and churned 1,000× too fast — the owner: "The clouds are moving way! Too fast!" (plant skyms)
   time += dt; paint.time.value += dt; skyPaint.update(PLANT === 'skyms' ? time * 1000 : time);
@@ -474,7 +549,7 @@ function frame(now) {
       const sp = gap > 0 ? Math.min(st.lunge, gap / Math.max(dt, 1e-3)) : 0; to.normalize(); vx = to.x * sp; vz = to.z * sp;
     } else if (st.t < st.impact) { vx = fw.x * st.lunge; vz = fw.z * st.lunge; } else { vx = vz = 0; }
     vel.set(0, 0);
-    if (st.target && !st.target.dead && st.t < st.impact) { const to = new THREE.Vector3().subVectors(st.target.root.position, pos); facing = Math.atan2(to.x, to.z) - Math.atan2(st.contact.off, st.contact.reach); }
+    if (st.target && !st.target.dead && st.t < st.impact) { const to = new THREE.Vector3().subVectors(st.target.root.position, pos); const tc = st.def.takedown && align.turnedContact(st.def.clip, facing, pos); facing = Math.atan2(to.x, to.z) - (tc ? Math.atan2(tc.off, tc.reach) : Math.atan2(st.contact.off, st.contact.reach)); }
     // the chain: a buffered press starts the next strike at impact +166 ms (a hit) or +200 ms (a miss)
     if (pc.queued && st.i >= 0 && st.i < 2 && (st.t >= st.impact + (st.landed ? 0.166 : 0.2) || st.ended)) strike(st.i + 1);
   }
@@ -501,6 +576,7 @@ function frame(now) {
   { const v = player.character.GetLinearVelocity(); if (pc.alive && pc.roll <= 0 && !pc.special && !pc.strike && !pc.chiburi && !hold && !brush.holdsBody) ronin.move(Math.hypot(v.GetX(), v.GetZ())); }
   ronin.update(brush.selfClock ? brush.selfDt(realDt) : dt);              // in the brush his swing runs on the real clock: the world holds, he does not
   align.update(brush.selfClock ? brush.selfDt(realDt) : dt);              // the turn laid onto the pose the mixer just made (once a frame)
+  if (chain && chain.phase === 'cut' && pc.strike && pc.strike.def.takedown && chain.plane) align.carry(chain.plane.n, chain.plane.o, pc.strike.act.time - pc.strike.contact.t);
   brush.afterAnimate(me);
   if (pc.chiburi) {                                                       // the flick's drops, off the REAL tip, at the clip's own frames
     const ch = pc.chiburi, d = clipdata[CHIBURI.clip]; ch.t += dt;
@@ -526,7 +602,9 @@ function frame(now) {
         st.hit = true;
         const out = new THREE.Vector3().subVectors(bp, pos).setY(0).normalize();
         const dir = swing.clone().multiplyScalar(0.65).addScaledVector(out, 0.35).normalize();      // thrown along the cut, and away
-        const r = bandits.hit(b, dir, s.power, { breaksGuard: s.power > 1, from: pos });
+        if (s.takedown && b === st.target && PLANT !== 'chspare') b.hp = Math.min(b.hp, s.power);   // a takedown: his life brought to the blow (a front cut of 1: his death clip, then the ragdoll)
+        const r = bandits.hit(b, dir, s.power, { breaksGuard: s.power > 1 || !!s.takedown, from: pos });
+        if (PLANT === 'chgore' && s.takedown && b.dead) { let cut = false; b.root.traverse((o) => { if (!cut && o.isMesh) { o.visible = false; cut = true; } }); }   // plant: a piece of him gone
         const at = new THREE.Vector3(closest.x, THREE.MathUtils.clamp(closest.y, bp.y + 0.6, bp.y + 1.7), closest.z);
         if (r === 'blocked') { sfx('clash'); vfx.hit(at, out.clone().negate(), false); freeze = 0.05; trauma = Math.min(1, trauma + 0.2); pc.queued = false; continue; }
         st.landed = true; sfx('cut'); pc.ki = Math.min(100, pc.ki + 12);
@@ -549,8 +627,10 @@ function frame(now) {
   for (const c of env.camps) { c.fire.light.intensity = 5 + Math.sin(time * 11) * 0.8 + Math.sin(time * 23) * 0.5; for (const f of c.group.userData.flags) f.rotation.y = f.userData.base + Math.sin(time * 1.7 + f.userData.wave) * 0.25; }
 
   // the camera: behind and above, never under the ground, shaken by trauma² (KidsCanCode's screen shake)
+  if (!cam.hold) chainCameraBack(realDt);                                 // after the chain: the follow camera's own distance and height
   if (!cam.hold) {                                                        // cam.hold: a locked-off shot (filming)
-    if (brush.framing) cam.target.lerp(brush.frameTarget(tmp), 1 - Math.exp(-realDt * 7));   // the brush frames him and its focus (and lingers on a cut)
+    if (chain && chain.list[chain.k]) chainCamera(realDt);                 // the chain's one moving shot
+    else if (brush.framing) cam.target.lerp(brush.frameTarget(tmp), 1 - Math.exp(-realDt * 7));   // the brush frames him and its focus (and lingers on a cut)
     else cam.target.lerp(tmp.copy(pos).add(new THREE.Vector3(0, 1.5, 0)), 1 - Math.exp(-realDt * 10));
   }
   const off = new THREE.Vector3(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch)).multiplyScalar(cam.dist);
@@ -603,5 +683,5 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); co
 window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, LEAP_STRIKE, lock, LOCK_RANGE, birds, clouds, sky, skyPaint, paint, PALETTE, RAMP, WIND, sunDir,
   get facing() { return facing; }, set facing(v) { facing = v; },
   CHIBURI, tipTravel, GRID: { N, SPACING }, get blood() { return blood; }, get still() { return still; }, get hold() { return hold; }, get time() { return time; },
-  brush, input, me, contactOf, composer, align };
+  brush, input, me, contactOf, composer, align, chainOf: () => chain, get chainScale() { return chainScale; } };
 requestAnimationFrame(frame);

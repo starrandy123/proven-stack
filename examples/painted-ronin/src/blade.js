@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { DestructibleMesh } from 'three-pinata';
 import { LAYER_STATIC, LAYER_DEBRIS, addStaticBox } from './physics.js';
 import { col, paint, rect, atlasUniforms, PAINT_GLSL, addPatch, paintSurface, paintFog, RAMP } from './paint.js';
+import { createMarks, CHAIN } from './chain.js';
 
 export const BRUSH = {
   scale: 0.05, tauIn: 0.06, tauOut: 0.08,               // the world's clock held to 0.05 (ours); ≤ 0.08 within 0.25 s, back within 0.6 s (B3)
@@ -145,6 +146,14 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   const setOn = (m, v) => { if (m.uniforms) m.uniforms.on.value = v; else m.opacity = v; };
   const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), inkLine());
   line.name = 'brush-line'; line.userData.painted = 'stroke'; line.renderOrder = PL === 'lineover' ? 9 : 1; line.frustumCulled = false; line.visible = false; scene.add(line);
+  // A MARK lies ON the bandit (Sucker Punch: the chain shown "without utilising UI"; research L §6 A.4): a crimson stroke across his chest,
+  // blended, depth-tested and drawn after the fighters, set a little toward the eye (chain.js) so his own body never hides it and anyone in
+  // front of him does
+  const inkMark = () => new THREE.ShaderMaterial({ transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { map: { value: strokeTex }, uvT: { value: strokeTex.matrix }, color: { value: col('crimson') }, on: { value: 0 } },
+    vertexShader: 'uniform mat3 uvT; varying vec2 vUv; void main(){ vUv = (uvT * vec3(uv, 1.0)).xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform sampler2D map; uniform vec3 color; uniform float on; varying vec2 vUv; void main(){ float a = clamp(texture2D(map, vUv).g * 3.0, 0.0, 1.0) * on; if (a < 0.02) discard; gl_FragColor = vec4(color, a); }' });
+  const marks = createMarks({ scene, camera, vfx, strokeMaterial: inkMark, plant: PL });
 
   // ── the bits a cut throws: straw and splinters, painted from the atlas's flecks in the body's swatches, on the world's clock ──
   const BITS = 96, bitGeo = new THREE.InstancedBufferGeometry().copy(new THREE.PlaneGeometry(1, 1));
@@ -264,15 +273,19 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   function shoulder(me, out) { const f = me.facing; return out.set(me.pos.x - Math.cos(f) * 0.2, me.pos.y + 1.42, me.pos.z + Math.sin(f) * 0.2); }
   function aimPlane(me) {
     camera.updateMatrixWorld();
-    const c = S.focus ? centerOf(S.focus) : me.pos.clone().add(new THREE.Vector3(Math.sin(me.facing) * 1.2, 1.1, Math.cos(me.facing) * 1.2));
+    const fb = S.focusB && !S.focusB.dead ? S.focusB : null;
+    const c = fb ? fb.root.position.clone().add(new THREE.Vector3(0, CHAIN.heights[1], 0)) : S.focus ? centerOf(S.focus) : me.pos.clone().add(new THREE.Vector3(Math.sin(me.facing) * 1.2, 1.1, Math.cos(me.facing) * 1.2));
     // the aim: the focus's middle, at the height the stroke (or the brush's tip) crossed it, on the upright plane through the focus facing
     // the eye; kept in the WORLD once set, so the camera easing in never moves it (a screen point held still would slide up the mat)
     S.aim.copy(c);
-    if (S.focus) {
+    if (S.focus && !fb) {
       T.box.setFromObject(S.focus.mesh);
       if (S.screenNew) { const fn = camera.position.clone().sub(c).setY(0).normalize(), hit = onPlane(S.screenNew.x, S.screenNew.y, fn, c, new THREE.Vector3()); if (hit) S.aimY = hit.y - T.box.min.y; S.screenNew = null; }
       if (S.aimY !== null) S.aim.y = THREE.MathUtils.clamp(T.box.min.y + S.aimY, T.box.min.y + 0.03, T.box.max.y - 0.03);
     }
+    // the shot frames his own aim: while a stroke crosses a bandit the line is drawn through that bandit, but the camera does not go to him
+    // (it did, mid-stroke, and the stroke no longer crossed the man it was drawn across: wall C1)
+    if (!fb) (S.camAim || (S.camAim = new THREE.Vector3())).copy(S.aim);
     const H = shoulder(me, new THREE.Vector3()); S.toAim.copy(S.aim).sub(H).normalize();
     // the line's direction in the world: two points along the screen line through the aim's own screen point, on the plane square to toAim
     const sp = S.aim.clone().project(camera), px = (sp.x + 1) / 2 * innerWidth, py = (1 - sp.y) / 2 * innerHeight, e = 24;
@@ -407,8 +420,18 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
       if (k && k.down) {
         const dx = k.x - k.x0, dy = k.y - k.y0;
         if (Math.hypot(dx, dy) > 12) { S.theta = Math.atan2(-dy, dx); S.screenNew = { x: (k.x + k.x0) / 2, y: (k.y + k.y0) / 2 }; }
+        // a standing bandit the stroke crosses is its aim: the line is drawn through him (research L §6 C.1)
+        S.focusB = PL === 'chnomark' ? null : bandits.alive().find((b) => marks.crosses(b, me.pos, k.x0, k.y0, k.x, k.y)) || null;
       } else if (k && k.hover) S.screenNew = { x: k.hover.x, y: k.hover.y };
-      if (k && k.ended) release(me);
+      if (k && k.ended) {
+        // a stroke drawn across standing bandits MARKS them (an ink pot each, three at most) and cuts nothing; anywhere else it cuts
+        const crossed = PL === 'chnomark' ? [] : bandits.alive().filter((b) => marks.crosses(b, me.pos, k.x0, k.y0, k.x, k.y));
+        if (crossed.length) {
+          for (const b of crossed) { if (S.ink < 1 && !marks.marks.some((m) => m.b === b)) break; const r = marks.add(b, S.theta); if (r === 'marked' && PL !== 'bmfreeink') S.ink -= 1; log({ kind: 'mark', real: S.real, b, theta: S.theta, r, n: marks.count }); }
+          sfx('swing', 0.35); S.draw.mode = 'cut';
+        } else release(me);
+        S.focusB = null;
+      }
       if (inp.cut) release(me);
       // stepping round the focus, always facing it (left/right round it, up/down nearer or farther), on the real clock
       if (S.focus && !S.swing && (Math.abs(inp.mx) > 0.05 || Math.abs(inp.my) > 0.05)) {
@@ -419,7 +442,7 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
       const cut = cutOf(S.theta);
       if (cut !== S.cut) { S.cut = cut; if (!S.swing) pose(cut); }
       // he turns so the line's cut meets the focus where its clip's blade crosses in front of him (strike()'s own turn)
-      if (S.focus) {                                                      // ...by where the TURNED contact lands, once the body aligns (align.js)
+      if (S.focus && !S.focusB) {                                         // ...by where the TURNED contact lands, once the body aligns (align.js)
         const clip = (S.swing ? S.swing.cut : S.cut).clip, c = centerOf(S.focus), C = (align && align.turnedContact(clip, me.facing, me.pos)) || contactOf(clip), fa = Math.atan2(c.x - me.pos.x, c.z - me.pos.z) - Math.atan2(C.off, C.reach);
         const d = Math.atan2(Math.sin(fa - me.facing), Math.cos(fa - me.facing)); me.facing += d * Math.min(1, realDt * 12);
       }
@@ -450,12 +473,12 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
         const off = C.sub(frameTarget(new THREE.Vector3())), dist = off.length();
         const yaw = Math.atan2(off.x, off.z), pitch = Math.asin(THREE.MathUtils.clamp(off.y / dist, -1, 1)), dy = Math.atan2(Math.sin(yaw - cam.yaw), Math.cos(yaw - cam.yaw));
         cam.yaw += dy * k; cam.pitch += (pitch - cam.pitch) * k; cam.dist += (dist - cam.dist) * k;
-      } else if (S.linger <= 0 && S.saved && PL !== 'bmcamstuck') { cam.dist += (S.saved.dist - cam.dist) * k; cam.pitch += (S.saved.pitch - cam.pitch) * k; }
+      } else if (S.linger <= 0 && S.saved && PL !== 'bmcamstuck' && !S.camTaken) { cam.dist += (S.saved.dist - cam.dist) * k; cam.pitch += (S.saved.pitch - cam.pitch) * k; }
       const fov = PL === 'bmcamstuck' && !S.open ? BRUSH.cam.fov : baseFov + (BRUSH.cam.fov - baseFov) * S.lens;
       if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
     }
     // the held moment over: the follow camera has its own distance, height and lens back exactly (plant bmcamstuck keeps the brush's)
-    if (S.look === 0 && S.linger <= 0 && S.lens < 1e-3 && S.saved) { if (PL !== 'bmcamstuck') { cam.dist = S.saved.dist; cam.pitch = S.saved.pitch; if (camera.fov !== baseFov) { camera.fov = baseFov; camera.updateProjectionMatrix(); } } S.saved = null; }
+    if (S.look === 0 && S.linger <= 0 && S.lens < 1e-3 && S.saved) { if (PL !== 'bmcamstuck') { if (!S.camTaken) { cam.dist = S.saved.dist; cam.pitch = S.saved.pitch; } if (camera.fov !== baseFov) { camera.fov = baseFov; camera.updateProjectionMatrix(); } } S.saved = null; }
     // the look: the ink wash, the painter's focus, the sheet and the line, the crimson lines on what it will cut
     const L = S.look;
     painterly.brush.wash.value = PL === 'bmnowash' ? 0 : L; painterly.brush.flash.value = PL === 'bmnowash' ? 0 : S.flash;
@@ -468,6 +491,7 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
       const z = camera.position.clone().sub(line.position); z.addScaledVector(x, -z.dot(x)).normalize();
       line.quaternion.setFromRotationMatrix(T.m.makeBasis(x, new THREE.Vector3().crossVectors(z, x), z));
     }
+    marks.update(realDt);                                               // the marks on the bandits, until the chain takes them
     if (hud) { const full = Math.floor(S.ink + 1e-6); hud.pots.forEach((el, i) => { el.className = i < full ? 'full' : i < S.ink ? 'part' : ''; }); }
     document.body.classList.toggle('brush-open', S.open); document.body.classList.toggle('brush-near', !S.open && !!chooseFocus(me));
     if (S.freeze > 0) S.freeze = Math.max(0, S.freeze - realDt);
@@ -530,10 +554,10 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
     if (a >= 1 && !x.out) { x.mesh.material = x.origMat; for (const m of x.fadeMats) m.dispose(); x.fadeMats = null; }
   }
   // the framing point the follow camera looks at in the held moment: most of the way from his chest to the aim
-  function frameTarget(out, me = S.me) { return out.copy(me.pos).add(new THREE.Vector3(0, 1.35, 0)).lerp(S.aim, BRUSH.cam.look); }
+  function frameTarget(out, me = S.me) { return out.copy(me.pos).add(new THREE.Vector3(0, 1.35, 0)).lerp(S.camAim || S.aim, BRUSH.cam.look); }
 
   return {
-    BRUSH, CUTS, S, stands, pieces, events, sheet, line, lineU, materials: M, bits, clock, align, inkLine,
+    BRUSH, CUTS, S, stands, pieces, events, sheet, line, lineU, materials: M, bits, clock, align, inkLine, marks,
     get active() { return S.open; }, get timeScale() { return S.ts; }, get look() { return S.look; }, get framing() { return S.look > 0 || S.linger > 0; },
     get holdsBody() { return S.open || !!S.swing; }, get selfClock() { return S.open || !!S.swing; }, selfDt: (realDt) => (S.freeze > 0 ? 0 : realDt),
     frame, afterAnimate, sync, frameTarget, open, close, release, cutOf, aimPlane, volumeOf,

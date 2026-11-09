@@ -1061,6 +1061,82 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
   }
 }
 
+// ── THE CHAIN (research L §6 C, §7): three bandits of a camp marked by three strokes through the game's own touch handlers, then taken in the
+// order marked; read every frame. --only Cchain runs it alone. Plants: chnomark (C1) · chnear (C2) · chspare (C3) · chslowstuck, chnobeat (C5)
+// · chcamstuck (C6) · chgore (C8)
+if (want('C') || want('Cchain')) {
+  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: engine === 'chromium', hasTouch: true, deviceScaleFactor: 2 });
+  await ctx.addInitScript(() => { window.__MOSA_DEVICE = { mobile: true, touch: true }; });
+  const page = await ctx.newPage(); const errors = []; page.on('pageerror', (e) => errors.push(String(e.message || e)));
+  // the full valley (no ?test: four bandits a camp), camp 0's placed by hand as W6 places them: teleported on their own navmesh, holding
+  await page.goto(url + 'index.html' + (plant ? '?plant=' + plant : ''));
+  await page.waitForFunction(() => window.__MOSA_BOOT && window.__MOSA_BOOT.ok === true, null, { timeout: 60000 }); await page.waitForTimeout(900);
+  await page.evaluate(BW); await page.evaluate(CW);
+  const r = await page.evaluate(async () => {
+    const { G, T, B, wait, raf } = window.__BW, { touch } = window.__CW;
+    const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0] && !b.dead); if (camp.length < 3) return { error: 'camp 0 has ' + camp.length + ' standing' };
+    for (const b of G.bandits.list) if (!b.dead) b.state = 'hold';
+    const place = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+    const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(300);
+    const three = camp.slice(0, 3); place(three[0], c.x + 4, c.y - 2.6); place(three[1], c.x + 3, c.y + 0.4); place(three[2], c.x + 4.4, c.y + 3);
+    for (const b of camp.slice(3)) place(b, c.x - 9, c.y + 9);
+    const mid3 = three.reduce((a, b) => a.add(b.root.position), new T.Vector3()).divideScalar(3); G.me.facing = Math.atan2(mid3.x - x0, mid3.z - z0);   // he faces them, as a player would
+    G.cam.yaw = Math.PI / 2; G.cam.pitch = 0.22; await wait(900);
+    const follow = { dist: G.cam.dist, pitch: G.cam.pitch };
+    const vis = (b) => { let n = 0; b.root.traverse((o) => { if (o.isMesh && o.visible) n += o.geometry.attributes.position.count; }); return n; }, whole0 = three.map(vis);
+    for (let k = 0; k < 30 && !B.active; k++) { B.open(G.me); if (!B.active) await wait(100); }
+    await wait(600); const ink0 = B.S.ink;    // the brush's shot mostly settled (it eases in over 0.3 s), inside the 1.5 s before its ink dries
+    // C1: a stroke across each bandit's chest, as a finger would draw it
+    const diag = [];
+    for (const b of three) {
+      const c = b.root.position.clone(); c.y += 1.25; const q = c.project(G.camera), x = (q.x + 1) / 2 * innerWidth, y = (1 - q.y) / 2 * innerHeight;
+      touch('touchstart', x - 60, y + 30); for (let s = 1; s <= 6; s++) { touch('touchmove', x - 60 + 20 * s, y + 30 - 10 * s); await raf(); }
+      const at = { me: +b.root.position.distanceTo(G.me.pos).toFixed(2), x: Math.round(x), y: Math.round(y), mode: B.S.draw.mode, open: B.active, cross: B.marks.crosses(b, G.me.pos, x - 60, y + 30, x + 60, y - 30) };
+      touch('touchend', x + 60, y - 30); await raf(); at.marks = B.marks.marks.map((m) => three.indexOf(m.b)); diag.push(at); }
+    const marked = B.marks.marks.map((m) => three.indexOf(m.b)), spent = +(ink0 - B.S.ink).toFixed(2);
+    const other = G.bandits.alive().find((b) => !three.includes(b)), fourth = other ? B.marks.add(other, 0.3) : 'no fourth bandit';
+    // the chain, read every frame until it has ended 1.2 s
+    const t0 = performance.now(), hits = [], scale = []; let started = null, ended = null, prev = null, worstStep = 0, worstTurn = 0;
+    while (performance.now() - t0 < 30000) {
+      const t = (await raf() - t0) / 1000, ch = G.chainOf(), st = G.pc.strike;
+      if (ch && started === null) started = t;
+      // the REAL tip at each takedown's impact (W9's measure, read at the impact itself: the blow registers 0.05 s of strike time before it)
+      if (ch && st && st.def.takedown && st.t >= st.impact && !st.__read) { st.__read = true; const tip = G.ronin.sword.userData.tip.getWorldPosition(new T.Vector3()), tp = st.target.root.position;
+        hits.push({ who: three.indexOf(st.target), axis: +Math.hypot(tip.x - tp.x, tip.z - tp.z).toFixed(2), h: +(tip.y - tp.y).toFixed(2), dead: st.target.dead }); }
+      const cp = G.camera.position.clone(), cq = G.camera.quaternion.clone();
+      if (prev && started !== null) { worstStep = Math.max(worstStep, cp.distanceTo(prev.p)); worstTurn = Math.max(worstTurn, 2 * Math.acos(Math.min(1, Math.abs(cq.dot(prev.q)))) * 57.3); }
+      prev = { p: cp, q: cq }; scale.push({ t, s: G.chainScale, ph: ch ? ch.phase : null });
+      if (started !== null && !ch && ended === null) ended = t;
+      if (ended !== null && t > ended + 1.2) break;
+    }
+    window.__chainLogs = window.__chainLogs || []; const all = (window.__chainLogs.length ? window.__chainLogs : [window.__chainLog || []]);
+    const chainLog = all.map((l) => l.map((e) => `${e.kind}${e.k !== undefined ? e.k : ''}${e.b ? ':' + three.indexOf(e.b) : ''}${e.dead !== undefined ? (e.dead ? '†' : '!') : ''}${e.dash ? '~' : ''}`).join(' ')).join(' | ');
+    const taken = (window.__chainLog || []).filter((e) => e.kind === 'taken').map((e) => three.indexOf(e.b));
+    const inCut = scale.filter((x) => (x.ph === 'cut' || x.ph === 'dash') && started !== null && x.t > started + 0.3).map((x) => x.s);
+    const inBeat = scale.filter((x) => x.ph === 'beat').map((x) => x.s), back = ended === null ? null : scale.find((x) => x.t > ended && x.s >= 0.99);
+    return { chainLog, marksLeft: B.marks.count, diag, near: G.bandits.alive().filter((b) => b.root.position.distanceTo(G.me.pos) < 12).map((b) => [three.indexOf(b), +b.root.position.distanceTo(G.me.pos).toFixed(1)]), error: null, marked, spent, fourth, started, ended, hits, taken, whole: three.map((b, i) => vis(b) === whole0[i]),
+      slowMax: inCut.length ? +Math.max(...inCut).toFixed(3) : null, beatMin: inBeat.length ? +Math.min(...inBeat).toFixed(3) : null, backAfter: back ? +(back.t - ended).toFixed(2) : null,
+      worstStep: +worstStep.toFixed(3), worstTurn: +worstTurn.toFixed(1), camBack: { dist: +Math.abs(G.cam.dist - follow.dist).toFixed(3), pitch: +(Math.abs(G.cam.pitch - follow.pitch) * 57.3).toFixed(2) } };
+  });
+  if (r.chainLog !== undefined) console.log('  the chain(s): ' + r.chainLog + ' · marks left: ' + r.marksLeft);
+  if (r.diag) console.log('  C1 strokes: ' + JSON.stringify(r.diag) + ' · bandits within 12 m (index in the three, metres): ' + JSON.stringify(r.near));
+  if (r.error) wall('C1 marks', false, r.error);
+  else {
+    wall('C1 marks', !errors.length && r.marked.length === 3 && new Set(r.marked).size === 3 && Math.abs(r.spent - 3) < 0.05 && r.fourth === 'full',
+      `three strokes across three bandits: marked ${JSON.stringify(r.marked)} (three, each once), ${r.spent} pots spent (3); a fourth mark while three are held: ${r.fourth} ('full')`);
+    wall('C2 the order', !errors.length && r.taken.length === 3 && JSON.stringify(r.taken) === JSON.stringify(r.marked), `taken ${JSON.stringify(r.taken)} against marked ${JSON.stringify(r.marked)}`);
+    wall('C3 each lands', !errors.length && r.hits.length === 3 && r.hits.every((h) => h.dead && h.axis <= 0.6 && h.h >= 0.45 && h.h <= 1.85),
+      r.hits.map((h) => `#${h.who}: ${h.dead ? 'dead' : 'STANDING'}, the real tip ${h.axis} m off his axis (≤ 0.6), ${h.h} m up (0.45-1.85)`).join(' · ') + ` (${r.hits.length} of 3 landed)`);
+    wall('C5 time', !errors.length && r.slowMax !== null && r.slowMax <= 0.5 && r.beatMin !== null && r.beatMin <= 0.08 && r.backAfter !== null && r.backAfter <= 0.6,
+      `slow through the takedowns: the world at most ${r.slowMax} (≤ 0.5); held in the beats: down to ${r.beatMin} (≤ 0.08); back to 1 ${r.backAfter} s after the last (≤ 0.6)`);
+    wall('C6 the camera', !errors.length && r.worstStep <= 0.6 && r.worstTurn <= 12 && r.camBack.dist <= 0.05 && r.camBack.pitch <= 0.5,
+      `never a cut: at most ${r.worstStep} m and ${r.worstTurn}° in a frame (≤ 0.6, ≤ 12); 1.2 s after the chain the follow camera is back: ${r.camBack.dist} m, ${r.camBack.pitch}° off (≤ 0.05, ≤ 0.5)`);
+    wall('C8 no gore', !errors.length && r.whole.every(Boolean), `every taken bandit's meshes whole: ${JSON.stringify(r.whole)}`);
+  }
+  if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
+  await ctx.close();
+}
+
 await browser.close(); server.close();
 const red = results.filter((x) => !x.ok).length;
 console.log(red ? `\n✖ ${red} wall(s) red (${engine}${plant ? ', plant ' + plant : ''})` : `\n✔ every wall holds (${engine})`);

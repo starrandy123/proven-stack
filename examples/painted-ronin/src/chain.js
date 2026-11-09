@@ -63,7 +63,7 @@ export function createMarks({ scene, camera, vfx, strokeMaterial, plant = null }
     const old = marks.find((m) => m.b === b); if (old) { old.theta = theta; return 'again'; }
     if (marks.length >= CHAIN.max && plant !== 'chfour') return 'full';
     const enso = vfx.enso.clone(); enso.material = vfx.enso.material.clone(); enso.visible = true; enso.material.opacity = 0; scene.add(enso);
-    const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), strokeMaterial()); line.renderOrder = 7; line.frustumCulled = false; line.userData.painted = 'stroke'; scene.add(line);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), strokeMaterial()); line.renderOrder = 3; line.frustumCulled = false; line.userData.painted = 'stroke'; scene.add(line);
     marks.push({ b, theta, enso, line, a: 0 }); return 'marked';
   }
   // every frame (real seconds): each mark's ensō under him and his crimson stroke across his chest, at his angle, facing the eye
@@ -72,7 +72,7 @@ export function createMarks({ scene, camera, vfx, strokeMaterial, plant = null }
       m.a = Math.min(1, m.a + dt / 0.18);
       const p = m.b.root.position; m.enso.position.set(p.x, p.y + 0.06, p.z); m.enso.material.opacity = m.a;
       const c = p.clone(); c.y += CHAIN.heights[1]; const d = screenLineDir(camera, c, m.theta, tmp), z = camera.position.clone().sub(c); z.addScaledVector(d, -z.dot(d)).normalize();
-      m.line.position.copy(c); m.line.scale.set(CHAIN.markLen, 0.06, 1);
+      m.line.position.copy(c).addScaledVector(camera.position.clone().sub(c).normalize(), 0.3); m.line.scale.set(CHAIN.markLen, 0.06, 1);   // on his front, toward the eye
       m.line.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(d, new THREE.Vector3().crossVectors(z, d), z));
       if (m.line.material.uniforms && m.line.material.uniforms.on) m.line.material.uniforms.on.value = m.a; else m.line.material.opacity = 0.95 * m.a;
     }
