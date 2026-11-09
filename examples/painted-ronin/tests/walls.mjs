@@ -28,7 +28,8 @@
 //                  kills ≥ 2.6× (and ≥ 1.3× a wound) and lingers ≥ 1.2 s; 閃's ink line swells ≥ 1.8× over a body it kills (sumi-e: light
 //                  pressure thin, heavy pressure bold; the owner, 8 Nov: "thicker as they injure their enemies … and show death") plant nopress
 //   W16 the blot — a cut that wounds or kills shows an ink blot BEHIND the fighters (his own pixels unchanged by it) for 0.07 s of game
-//                  time, held through the hit-stop, its reach about his height, the stroke bare paper meanwhile; none on a miss or a
+//                  time, held through the hit-stop, its ink flung 0.6-1.8× his height from the wound (round 2's strokes: a reach, not a
+//                  disc's area; ≥ 0.5 % of the frame), the stroke bare paper meanwhile; none on a miss or a
 //                  block (the ink cut's contact; Sakuga Booru's shock frames)                  plants noblot, blotfront, paperoff
 //   W17 the flecks — a wound flings 9 drops along the stroke's own travel (4 crimson, 5 ink) and 3 ink back, a kill 14 (10 crimson); each
 //                  lands as a stain lying on the terrain's own triangles (≤ 1 cm) and has dried away by 2.35 s (a kill 2.95 s), read in
@@ -38,9 +39,17 @@
 //                  drop's flight; no flick after a cut in the air                                plants nochiburi, chiburimiss
 //   W19 the crimson — the stroke's own pixels: a cut in the air ≤ 2 % crimson; a wound ≥ 5 %, its inner half ≥ 2× its outer; a kill
 //                  ≥ 30 % and ≥ 1.5× a wound (flooded)                                                    plant misscrimson
+//   W20 no square corners — every mark of the ink comes whole, as MyPaint's brush lays it (the owner, 9 Nov: "One corner looks too square
+//                  and shart … And rectangle I mean"): each of a wound's and a kill's 16 strokes, drawn alone, starts in a round press (just past
+//                  its start ≤ 0.75 of its widest, with its bleed and its ink alone; a straight cut reads ~1), and no droplet, flying drop or
+//                  stain draws a pixel on its tile's outer 3 % (puff_a's and dab_oil's cut sides); both looks          plants flatstart, rimoff
+//   W21 brush strokes — the splash is strokes, not a smudge (the owner, 8 Nov: "It just looks like black smudge"): its outline ≥ 4× a
+//                  disc's (perimeter² ÷ 4π·area), ≥ 2 palette tones each ≥ 3 % of it, ≥ 1.5× longer along the cut's travel than across  plant smudge
+//   W22 pixel art — after the oil pass, in the final picture read off the screen, ≥ 85 % of the splash's cells that meet another tone are
+//                  one value (the owner: "making sure it looks pixelly but painted as well")                              plant nopixel
 //   W13 clear view — the follow camera never sits inside a camp's smoke column: with the ronin 1 m from a fire and the camera aimed
 //                  through it, the lens stays ≥ 2.5 m from the smoke's axis (Cinemachine's collider; the 8 Nov reveal went white)  plant camclip
-//   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee] [--only W2,W3,W6,W8,W9,W10,W14,W12,ink,W13,W5]
+//   node examples/painted-ronin/tests/walls.mjs [--engine chromium|webkit] [--plant knee] [--only W2,W3,W6,W8,W9,W10,W14,W12,ink,W20,W22,W13,W5]
 //   (a plant must turn its wall red: exit 1)
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -356,7 +365,7 @@ if (want('W2')) {
       // how much of those slots still shows, seen from straight above (the stain mesh alone, only those slots drawn)
       const top = new T.PerspectiveCamera(60, PW / PH, 0.5, 60);
       const coverage = (sl, over) => { if (!sl.length) return 0; top.position.copy(over).add(new T.Vector3(0, 14, 0)); top.up.set(0, 0, -1); top.lookAt(over); top.updateMatrixWorld(true);
-        let n = 0; for (const s of sl) { SG.setDrawRange(s.slot * SV, SV); const f = shot([V.stainMesh], top); for (let i = 0; i < PW * PH; i++) if (f[i * 4 + 3] > 0.5) n++; }
+        let n = 0; for (const s of sl) { SG.setDrawRange(s.slot * SV, SV); const f = shot([V.stainMesh], top); for (let i = 0; i < PW * PH; i++) if (f[i * 4 + 3] >= 0.25) n++; }   // ≥ 0.25: pixel cells write alpha 0.5
         SG.setDrawRange(0, Infinity); return n; };
       const tipNow = () => G.ronin.sword.userData.tip.getWorldPosition(new T.Vector3());
 
@@ -380,10 +389,13 @@ if (want('W2')) {
           else if (V.blot.visible && !o.blot) {                                       // W16: the blot's first frame
             const full = shot(null); V.blot.visible = false; const bare = shot(null); V.blot.visible = true;
             const mask = shot(meshesOf(b.root)), during = crimson(shot([arc.m]));
-            let inside = 0, inN = 0, changed = 0;
-            for (let i = 0; i < PW * PH; i++) { const dl = Math.abs(lum(full, i) - lum(bare, i)); if (mask[i * 4 + 3] > 0.5) { inN++; inside += dl; } else if (dl > 0.04) changed++; }
+            let inside = 0, inN = 0, changed = 0; const dist = [];
+            // the splash's REACH (round 2: strokes flung from the wound, not a filled disc): how far its changed pixels lie from the wound, in his heights
+            const w0 = V.blotState.at.clone().project(G.camera), wx = (w0.x + 1) / 2 * PW, wy = (w0.y + 1) / 2 * PH;
+            for (let i = 0; i < PW * PH; i++) { const dl = Math.abs(lum(full, i) - lum(bare, i)); if (mask[i * 4 + 3] > 0.5) { inN++; inside += dl; } else if (dl > 0.04) { changed++; dist.push(Math.hypot((i % PW) + 0.5 - wx, Math.floor(i / PW) + 0.5 - wy)); } }
             const feet = b.root.position.clone(), sF = feet.clone().project(G.camera), sH = feet.clone().setY(feet.y + b.standH).project(G.camera), hPx = Math.abs(sH.y - sF.y) * PH / 2;
-            o.blot = { at: clk, real: now, insideDiff: +(inN ? inside / inN : 0).toFixed(4), inN, area: +(changed / (PW * PH)).toFixed(3), ratio: +(Math.sqrt(changed / Math.PI) / Math.max(1, hPx)).toFixed(2), arcLum: during.lum, arcN: during.n };
+            dist.sort((x, y) => x - y); const reach = dist.length ? dist[Math.floor(dist.length * 0.98)] / Math.max(1, hPx) : 0;
+            o.blot = { at: clk, real: now, insideDiff: +(inN ? inside / inN : 0).toFixed(4), inN, area: +(changed / (PW * PH)).toFixed(3), ratio: +reach.toFixed(2), arcLum: during.lum, arcN: during.n };
           }
           if (o.blot && o.blot.hid === undefined && !V.blot.visible) { o.blot.hid = +(clk - o.blot.at).toFixed(3); o.blot.hidReal = +((now - o.blot.real) / 1000).toFixed(3); }
           if (!o.c0 && V.drops.length && !b) o.c0 = clk;                              // (a miss has no blot to start its clock)
@@ -435,8 +447,8 @@ if (want('W2')) {
       return { miss, wound, death };
     });
     const { miss: m, wound: w, death: d } = r, E = errors.length ? ' · page errors: ' + errors.slice(0, 2).join(' | ') : '';
-    const blotOk = (x) => x.blot && x.blot.hid >= 0.06 && x.blot.hid <= 0.2 && x.blot.hidReal >= 0.1 && x.blot.insideDiff <= 0.01 && x.blot.area >= 0.05 && x.blot.ratio >= 0.6 && x.blot.ratio <= 1.6 && x.blot.arcLum >= 0.55;
-    const bd = (x) => x.blot ? `shown ${x.blot.hid} s of game time, ${x.blot.hidReal} s on the clock (held through the hit-stop), ${(x.blot.area * 100).toFixed(0)} % of the frame, its reach ${x.blot.ratio}× his height, his own pixels changed ${x.blot.insideDiff} (behind him), the stroke ${x.blot.arcLum} light (bare paper)` : 'NO BLOT';
+    const blotOk = (x) => x.blot && x.blot.hid >= 0.06 && x.blot.hid <= 0.2 && x.blot.hidReal >= 0.1 && x.blot.insideDiff <= 0.01 && x.blot.area >= 0.005 && x.blot.ratio >= 0.6 && x.blot.ratio <= 1.8 && x.blot.arcLum >= 0.55;
+    const bd = (x) => x.blot ? `shown ${x.blot.hid} s of game time, ${x.blot.hidReal} s on the clock (held through the hit-stop), ${(x.blot.area * 100).toFixed(0)} % of the frame, its reach ${x.blot.ratio}× his height from the wound (98th percentile), his own pixels changed ${x.blot.insideDiff} (behind him), the stroke ${x.blot.arcLum} light (bare paper)` : 'NO BLOT';
     wall('W16 the blot', !m.blot && blockBlots === 0 && blotOk(w) && blotOk(d) && !errors.length,
       `a wound: ${bd(w)} · a kill: ${d.blot ? 'shown ' + d.blot.hid + ' s, his own pixels changed ' + d.blot.insideDiff : 'NO BLOT'} · a cut in the air: ${m.blot ? 'A BLOT' : 'none'} · a blocked cut: ${blockBlots === null ? 'not measured' : blockBlots ? 'A BLOT' : 'none'}${E}`);
     const dried = (x) => x.cover[0] && x.cover[1] && x.cover[0].px > 0 && x.cover[1].slots === x.born && x.cover[1].px === 0;   // showing, then every one landed and dried
@@ -453,6 +465,173 @@ if (want('W2')) {
     const a = (x) => x.arc ? x.arc.all.share : null;
     wall('W19 the crimson', m.arc && w.arc && d.arc && m.arc.all.n >= 50 && a(m) <= 0.02 && a(w) >= 0.05 && w.arc.inner.share >= 2 * w.arc.outer.share && a(d) >= 0.3 && a(d) >= 1.5 * a(w) && !errors.length,
       `the stroke's own pixels in crimson: a cut in the air ${a(m)} (none) · a wound ${a(w)}, its inner half ${w.arc ? w.arc.inner.share : '—'} against its outer ${w.arc ? w.arc.outer.share : '—'} · a kill ${a(d)} (flooded)${E}`);
+    await page.close();
+  }
+
+  // W20 no square corners · W21 brush strokes, not a smudge (round 2, his notes of 8-9 Nov). The splash card drawn ALONE from an orthographic
+  // camera square on it, so each pixel is a point q of the card (in his heights from the wound), one stroke at a time; one droplet, one
+  // flying drop and one stain alone, each pixel mapped back to its own tile's uv by the inverse of its shader's geometry. In both looks: B
+  // (the default, pixel cells) and A (?inkpix=0, painted).
+  if (want('W20')) {
+    for (const look of ['', 'inkpix=0']) {
+      const { page, errors } = await open(look);
+      const r = await page.evaluate(async () => {
+        const G = window.__GAME, T = G.THREE, R = G.renderer, V = G.vfx, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+        const frame = () => new Promise((ok) => requestAnimationFrame(() => ok()));
+        G.bandits.blockChance = 0; G.pc.invuln = 99;
+        const c = G.land.spots.camps[0], x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(400);
+        // `only`, from `cam`, into a W×H RGBA8 target: the shaders' own colours (a ShaderMaterial writes them untransformed)
+        const grab = (only, cam, W, H) => {
+          const rt = new T.WebGLRenderTarget(W, H), hidden = [];
+          G.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o.visible && !only.includes(o)) { o.visible = false; hidden.push(o); } });
+          const cc = R.getClearColor(new T.Color()), ca = R.getClearAlpha();
+          R.setRenderTarget(rt); R.setClearColor(0x000000, 0); R.clear(); R.render(G.scene, cam); R.setClearColor(cc, ca); R.setRenderTarget(null);
+          const b = new Uint8Array(W * H * 4); R.readRenderTargetPixels(rt, 0, 0, W, H, b); rt.dispose(); for (const o of hidden) o.visible = true; return b; };
+        const card = V.blot, U = card.material.uniforms, F = U.flicks.value, D = U.drops.value;
+        // an orthographic camera square on the card, seeing its rect [qx0, qx1] × [qy0, qy1] (q: the shader's own, in his heights)
+        const cardCam = (qx0, qx1, qy0, qy1) => {
+          card.updateMatrixWorld(true); const k = card.scale.x / V.BLOT.span;
+          const rt = new T.Vector3(1, 0, 0).applyQuaternion(card.quaternion), up = new T.Vector3(0, 1, 0).applyQuaternion(card.quaternion), nr = new T.Vector3(0, 0, 1).applyQuaternion(card.quaternion);
+          const cam = new T.OrthographicCamera(-(qx1 - qx0) / 2 * k, (qx1 - qx0) / 2 * k, (qy1 - qy0) / 2 * k, -(qy1 - qy0) / 2 * k, 0.01, 10);
+          cam.position.copy(card.position).addScaledVector(rt, (qx0 + qx1) / 2 * k).addScaledVector(up, (qy0 + qy1) / 2 * k).addScaledVector(nr, 2);
+          cam.quaternion.copy(card.quaternion); cam.updateMatrixWorld(true); cam.updateProjectionMatrix(); return cam; };
+        const lin = (o, px) => [px[o], px[o + 1], px[o + 2]];
+        // the palette's ink tones as the shader writes them (linear, 8 bit): ink, the mid tone, crimson, maple
+        const tone = (r, g, b) => (r < 12 && g < 12 && b < 12) ? 'ink' : (r > 3 * Math.max(g, b, 1) ? (r < 100 ? 'crimson' : 'maple') : 'mid');
+        const dark = (o, px) => px[o + 3] > 0 && ['ink', 'crimson'].includes(tone(...lin(o, px)));
+        const travel = new T.Vector3(-0.8, 0.5, 0.3).normalize(), p0 = G.ronin.root.position, at = new T.Vector3(p0.x - 1.1, p0.y + 1.2, p0.z);
+        const cr = new T.Vector3(1, 0, 0).applyQuaternion(G.camera.quaternion), cu = new T.Vector3(0, 1, 0).applyQuaternion(G.camera.quaternion), th = Math.atan2(travel.dot(cu), travel.dot(cr));
+        const out = {};
+        for (const level of [1, 2]) {
+          V.contact(at, 1.8, level, null, G.camera, travel);                    // the game's own call, as a cut lands
+          const keepF = F.map((f) => f.clone()), keepD = D.map((d) => d.clone());
+          // W21 on the whole splash: its outline against a disc's, its tones, its reach along the cut's travel against across it
+          const RW = 1024, all = grab([card], cardCam(-1.6, 1.6, -1.6, 1.6), RW, RW);
+          let area = 0, edge = 0, sa = 0, sc = 0; const tones = {};
+          for (let y = 0; y < RW; y++) for (let x = 0; x < RW; x++) { const o = (y * RW + x) * 4; if (!all[o + 3]) continue; area++;
+            const t = tone(...lin(o, all)); tones[t] = (tones[t] || 0) + 1;
+            if (x === 0 || y === 0 || x === RW - 1 || y === RW - 1 || !all[o - 4 + 3] || !all[o + 4 + 3] || !all[o - RW * 4 + 3] || !all[o + RW * 4 + 3]) edge++;
+            const qx = (x + 0.5) / RW * 3.2 - 1.6, qy = (y + 0.5) / RW * 3.2 - 1.6, al = qx * Math.cos(th) + qy * Math.sin(th), ac = -qx * Math.sin(th) + qy * Math.cos(th); sa += al * al; sc += ac * ac; }
+          const toneN = Object.values(tones).filter((n) => n >= 0.03 * area).length;
+          const whole = { area, iso: +(edge * edge / (4 * Math.PI * Math.max(area, 1))).toFixed(2), tones: toneN, toneShares: Object.fromEntries(Object.entries(tones).map(([k, n]) => [k, +(n / area).toFixed(3)])), along: +Math.sqrt(sa / Math.max(sc, 1e-9)).toFixed(2) };
+          // W20 · the press: each stroke alone, its start read across its own axis; the width a little past its first covered
+          // cross-section against its widest near the start (a round dab ≈ 0.5, a straight cut ≈ 1), for all it draws (with its bleed) and for its dark ink alone
+          const Q = 0.62, RES = 768, step = 2 * Q / RES, presses = [];
+          for (let i = 0; i < 16; i++) {
+            F.forEach((f, j) => f.copy(keepF[j]).setZ(j === i ? keepF[j].z : 0)); D.forEach((d) => d.setZ(0));
+            const px = grab([card], cardCam(-Q, Q, -Q, Q), RES, RES), f = keepF[i], w = Math.abs(f.w), dx = Math.cos(f.x), dy = Math.sin(f.x);
+            const idx = (qx, qy) => { const x = Math.floor((qx + Q) / step), y = Math.floor((qy + Q) / step); return x < 0 || y < 0 || x >= RES || y >= RES ? -1 : (y * RES + x) * 4; };
+            const width = (a, test) => { let lo = Infinity, hi = -Infinity; for (let s = -1.1 * w; s <= 1.1 * w; s += step / 2) { const o = idx(dx * a - dy * s, dy * a + dx * s); if (o >= 0 && test(o)) { lo = Math.min(lo, s); hi = Math.max(hi, s); } } return hi >= lo ? hi - lo : 0; };
+            const ratio = (test) => { let a0 = null; for (let a = -0.7 * w; a <= 0.7 * w; a += step / 2) if (width(a, test) > 0) { a0 = a; break; }
+              if (a0 === null) return null; let mx = 0; for (let a = a0; a <= a0 + 1.4 * w; a += step) mx = Math.max(mx, width(a, test)); return mx > 0 ? +(width(a0 + 0.075 * w, test) / mx).toFixed(3) : null; };
+            presses.push({ i, all: ratio((o) => px[o + 3] > 0), dark: ratio((o) => dark(o, px)) });
+          }
+          // W20 · each droplet alone: no pixel it draws lies in the outer 3 % of its own tile (puff_a's cut side)
+          const droplets = [];
+          for (let j = 0; j < 12; j++) {
+            const p = keepD[j]; if (p.z <= 0) continue;
+            F.forEach((f) => f.setZ(0)); D.forEach((d, k) => d.copy(keepD[k]).setZ(k === j ? keepD[k].z : 0));
+            const h = 1.4 * p.z, RD = 256, px = grab([card], cardCam(p.x - h, p.x + h, p.y - h, p.y + h), RD, RD); let n = 0, rim = 0;
+            for (let y = 0; y < RD; y++) for (let x = 0; x < RD; x++) { if (!px[(y * RD + x) * 4 + 3]) continue; n++;
+              const u = (-h + (x + 0.5) / RD * 2 * h) / (2.2 * p.z) + 0.5, v = (-h + (y + 0.5) / RD * 2 * h) / (2.2 * p.z) + 0.5; if (Math.min(u, 1 - u, v, 1 - v) < 0.03) rim++; }
+            droplets.push({ n, rim });
+          }
+          F.forEach((f, j) => f.copy(keepF[j])); D.forEach((d, j) => d.copy(keepD[j]));
+          out[level] = { whole, presses, droplets };
+        }
+        card.visible = false;
+        // W20 · one flying drop alone (a kill's): every pixel back to its quad's uv (vfx.js's billboard: along its flight × stretch, across)
+        V.wound(at, travel, 2); await frame(); await frame(); await frame();
+        const DG = V.dropMesh.geometry, A = DG.attributes, keepN = DG.instanceCount, dropsSeen = [];
+        for (let k = 0; k < Math.min(4, keepN); k++) {
+          const pos = new T.Vector3().fromArray(A.iPos.array, k * 3), vel = new T.Vector3().fromArray(A.iVel.array, k * 3), size = A.iSize.array[k];
+          const stretch = 1 + Math.min(1.4, Math.max(0, vel.length() * 0.06)), hs = 0.75 * size * stretch, RDp = 192;
+          const cam = new T.OrthographicCamera(-hs, hs, hs, -hs, 0.01, 10); cam.quaternion.copy(G.camera.quaternion);
+          cam.position.copy(pos).add(new T.Vector3(0, 0, 2).applyQuaternion(G.camera.quaternion)); cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+          const vv = vel.clone().applyQuaternion(G.camera.quaternion.clone().invert()), L = Math.hypot(vv.x, vv.y), d = L > 1e-4 ? [vv.x / L, vv.y / L] : [1, 0];
+          // only instance k: its attributes moved to slot 0 for one draw
+          const save = ['iPos', 'iVel', 'iSize', 'iTone'].map((n) => [n, A[n].array.slice(0, A[n].itemSize)]);
+          for (const n of ['iPos', 'iVel', 'iSize', 'iTone']) { const s = A[n].itemSize; A[n].array.copyWithin(0, k * s, k * s + s); A[n].needsUpdate = true; }
+          DG.instanceCount = 1; const px = grab([V.dropMesh], cam, RDp, RDp); DG.instanceCount = keepN;
+          for (const [n, a] of save) { A[n].array.set(a, 0); A[n].needsUpdate = true; }
+          let n = 0, rim = 0;
+          for (let y = 0; y < RDp; y++) for (let x = 0; x < RDp; x++) { if (!px[(y * RDp + x) * 4 + 3]) continue; n++;
+            const ox = ((x + 0.5) / RDp * 2 - 1) * hs, oy = ((y + 0.5) / RDp * 2 - 1) * hs;
+            const u = (ox * d[0] + oy * d[1]) / (size * stretch) + 0.5, v = (-ox * d[1] + oy * d[0]) / size + 0.5; if (Math.min(u, 1 - u, v, 1 - v) < 0.03) rim++; }
+          dropsSeen.push({ n, rim });
+        }
+        // W20 · each stain alone, seen down its projector's own axis (DecalGeometry's uv: 0.5 + x/L along, 0.5 + y/W across)
+        const from = V.clock.t; await wait(1500);
+        const SG = V.stainMesh.geometry, SV = SG.attributes.position.count / 96, stains = [];
+        for (const s of V.stainLog.filter((q) => q.landed >= from && V.clock.t < q.dryAt).slice(0, 8)) {
+          const hs = 0.7 * Math.max(s.L, s.W), RS = 192, cam = new T.OrthographicCamera(-hs, hs, hs, -hs, 0.01, 10);
+          cam.position.copy(s.at).addScaledVector(s.normal, 2); cam.up.copy(s.dir); cam.lookAt(s.at); cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+          const ax = new T.Vector3().setFromMatrixColumn(cam.matrixWorld, 0), ay = new T.Vector3().setFromMatrixColumn(cam.matrixWorld, 1), sy = new T.Vector3().crossVectors(s.normal, s.dir);
+          SG.setDrawRange(s.slot * SV, SV); const px = grab([V.stainMesh], cam, RS, RS); SG.setDrawRange(0, Infinity);
+          let n = 0, rim = 0;
+          for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) { if (!px[(y * RS + x) * 4 + 3]) continue; n++;
+            const ox = ((x + 0.5) / RS * 2 - 1) * hs, oy = ((y + 0.5) / RS * 2 - 1) * hs, P = ax.clone().multiplyScalar(ox).addScaledVector(ay, oy);
+            const u = P.dot(s.dir) / s.L + 0.5, v = P.dot(sy) / s.W + 0.5; if (Math.min(u, 1 - u, v, 1 - v) < 0.03) rim++; }
+          stains.push({ n, rim });
+        }
+        return { out, dropsSeen, stains, inkPix: V.inkPix.value };
+      });
+      const L = look ? 'A (painted)' : 'B (pixel cells)', E = errors.length ? ' · page errors: ' + errors.slice(0, 2).join(' | ') : '';
+      const ps = [...r.out[1].presses, ...r.out[2].presses], worst = (k) => Math.max(...ps.map((p) => p[k] === null ? 9 : p[k]));
+      const dl = [...r.out[1].droplets, ...r.out[2].droplets], rimN = (a) => a.reduce((m, q) => m + q.rim, 0), drawn = (a) => a.length > 0 && a.every((q) => q.n > 0);
+      wall(`W20 no square corners, ${L}`, ps.length === 32 && worst('all') <= 0.75 && worst('dark') <= 0.75 && drawn(dl) && rimN(dl) === 0 && drawn(r.dropsSeen) && rimN(r.dropsSeen) === 0
+        && r.stains.length >= 3 && drawn(r.stains) && rimN(r.stains) === 0 && !errors.length,
+        `the 32 strokes of a wound and a kill each start in a round press: just past its start its width is at most ${worst('all')} of its widest with its bleed, ${worst('dark')} for its ink alone (a straight cut reads ~1) · `
+        + `${dl.length} droplets, ${r.dropsSeen.length} flying drops and ${r.stains.length} stains drawn alone: ${rimN(dl)}, ${rimN(r.dropsSeen)} and ${rimN(r.stains)} pixels on their tiles' outer 3 % (cell ${r.inkPix} px)${E}`);
+      const sm = (x) => `outline ${x.iso}× a disc's, ${x.tones} tones (${Object.entries(x.toneShares).map(([k, v]) => k + ' ' + v).join(', ')}), ${x.along}× longer along the cut than across`;
+      const strokes = (x) => x.iso >= 4 && x.tones >= 2 && x.along >= 1.5;
+      wall(`W21 brush strokes, not a smudge, ${L}`, strokes(r.out[1].whole) && strokes(r.out[2].whole) && !errors.length, `a wound: ${sm(r.out[1].whole)} · a kill: ${sm(r.out[2].whole)}${E}`);
+      await page.close();
+    }
+  }
+
+  // W22 pixel art after the oil pass: in the game's own final picture (the composer's output, read off the canvas in the very frame it is
+  // drawn), the splash's pixels come in whole cells of inkPix where its tones meet: each cell beside a cell of another tone is one value,
+  // bar the canvas weave the grade lays over everything (Shadowglass's "pixel stabilization"; the oil pass would round them into a smudge).
+  // ?cine hides the HUD.                                                                                                plant nopixel
+  if (want('W22')) {
+    const { page, errors } = await open('cine', { width: 1600, height: 900 });
+    const m = await page.evaluate(async () => {
+      const G = window.__GAME, T = G.THREE, R = G.renderer, V = G.vfx, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      G.bandits.blockChance = 0; G.bandits.feintChance = 0; G.pc.invuln = 99;
+      const c = G.land.spots.camps[0], camp = G.bandits.list.filter((b) => b.nav === G.navs[0]);
+      const x0 = c.x + 10, z0 = c.y; G.player.setPosition(x0, G.land.groundY(x0, z0) + 0.3, z0); await wait(400);
+      const put = (b, x, z) => { const { point } = b.nav.query.findClosestPoint({ x, y: G.land.groundY(x, z), z }); b.agent.teleport(point); b.state = 'hold'; b.agent.resetMoveTarget(); };
+      camp.forEach((b) => put(b, c.x - 9, c.y + 9)); const b = camp[0], p0 = G.ronin.root.position; put(b, p0.x - 2.2, p0.z); b.hp = 99;
+      await wait(500); G.facing = Math.atan2(-1, 0); G.pc.strike = null; G.strike(0);
+      // the frame the splash first shows: this callback runs after the game's own in the same frame, before the canvas is presented
+      return await new Promise((done) => { const t0 = performance.now(); const tick = () => {
+        if (!V.blot.visible) { if (performance.now() - t0 < 8000) requestAnimationFrame(tick); else done({ shown: false }); return; }
+        const gl = R.getContext(), s = R.getDrawingBufferSize(new T.Vector2()), W = s.x, H = s.y, C = V.inkPix.value;
+        R.setRenderTarget(null); const fin = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, fin);
+        // the scene as the composer's first pass draws it: the ink's flagged pixels (alpha 0.5) and their tones by colour
+        const rt = new T.WebGLRenderTarget(W, H, { type: T.HalfFloatType }), cc = R.getClearColor(new T.Color()), ca = R.getClearAlpha();
+        R.setRenderTarget(rt); R.setClearColor(0x000000, 1); R.clear(); R.render(G.scene, G.camera); R.setClearColor(cc, ca); R.setRenderTarget(null);
+        const h = new Uint16Array(W * H * 4); R.readRenderTargetPixels(rt, 0, 0, W, H, h); rt.dispose();
+        const f = (i) => T.DataUtils.fromHalfFloat(h[i]), tones = new Uint16Array(W * H), ids = new Map(); let inkN = 0;
+        for (let i = 0; i < W * H; i++) { if (Math.abs(f(i * 4 + 3) - 0.5) > 0.05) continue; inkN++;
+          const key = [f(i * 4), f(i * 4 + 1), f(i * 4 + 2)].map((v) => Math.round(v * 200)).join(','); if (!ids.has(key)) ids.set(key, ids.size + 1); tones[i] = ids.get(key); }
+        // a cell is the shader's own: gl_FragCoord / inkPix, rows from the bottom as both readings are
+        const cellTone = (cx, cy) => { let t = -1; for (let y = cy * C; y < cy * C + C; y++) for (let x = cx * C; x < cx * C + C; x++) { const v = tones[y * W + x]; if (!v || (t >= 0 && v !== t)) return 0; t = v; } return t; };
+        const L = (x, y) => { const o = (y * W + x) * 4; return 0.2126 * fin[o] + 0.7152 * fin[o + 1] + 0.0722 * fin[o + 2]; };
+        let boundary = 0, whole = 0;
+        if (C >= 2) for (let cy = 1; cy < Math.floor(H / C) - 1; cy++) for (let cx = 1; cx < Math.floor(W / C) - 1; cx++) {
+          const t = cellTone(cx, cy); if (!t) continue;
+          if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b2]) => { const v = cellTone(cx + a, cy + b2); return v && v !== t; })) continue;
+          boundary++; let lo = 255, hi = 0, sum = 0; for (let y = cy * C; y < cy * C + C; y++) for (let x = cx * C; x < cx * C + C; x++) { const v = L(x, y); lo = Math.min(lo, v); hi = Math.max(hi, v); sum += v; }
+          if (hi - lo <= 4 + 0.08 * sum / (C * C)) whole++;
+        }
+        done({ shown: true, W, H, C, inkN, toneIds: ids.size, boundary, whole, held: V.blotState.t });
+      }; requestAnimationFrame(tick); });
+    });
+    const share = m.shown && m.boundary ? m.whole / m.boundary : 0, ok = m.shown && m.boundary >= 100 && share >= 0.85 && !errors.length;
+    wall('W22 pixel art after the oil pass', ok, (m.shown ? `${m.whole}/${m.boundary} of the splash's cells that meet another tone are one value in the final picture (${(share * 100).toFixed(0)} %), cell ${m.C} px at ${m.W}×${m.H}, ${m.inkN} ink pixels in ${m.toneIds} tones, read in the splash's first frame` : 'the splash never showed')
+      + (errors.length ? ' · page errors: ' + errors.slice(0, 2).join(' | ') : ''));
     await page.close();
   }
 

@@ -128,7 +128,9 @@ await page.evaluate(() => {
     sc(G.vfx.leaves, 'leaves'); G.vfx.smokes.forEach((s, i) => sc(s, 'smoke' + i)); sc(G.vfx.pools.spark[0], 'sparks'); sc(G.vfx.pools.ink[0], 'ink');
     arcs.forEach((a, i) => { for (const k of ['paperC', 'crimsonC', 'inkC']) add('slash' + i + '.' + k, U(a.m.material, k)); });
     add('dash', st.m.material.color); add('trail', U(G.vfx.trail.material, 'paperC'));
-    add('blot.ink', U(G.vfx.blot.material, 'inkC')); for (const [n, m] of [['drops', G.vfx.dropMesh.material], ['stains', G.vfx.stainMesh.material]]) { add(n + '.ink', U(m, 'inkC')); add(n + '.crimson', U(m, 'crimsonC')); }
+    // the splash's tones (round 2, 8-9 Nov: ink, the dry-brush mid tone, its bleed, crimson and maple flicks) and the drops' and stains' tones
+    for (const k of ['inkC', 'midC', 'washC', 'crimsonC', 'mapleC']) add('blot.' + k, U(G.vfx.blot.material, k));
+    for (const [n, m] of [['drops', G.vfx.dropMesh.material], ['stains', G.vfx.stainMesh.material]]) for (const k of ['inkC', 'crimsonC', 'midC', 'mapleC']) add(n + '.' + k, U(m, k));
     const off = authored.map(([n, c]) => [n, ...nearest(c)]).filter(([, d]) => d > 0.02).map(([n, d, k]) => `${n} ${d.toFixed(3)} from ${k}`);
     return { seen: seen.length, bad, rampBad, R3, swatches: sw.length, authored: authored.length, off: off.slice(0, 4), offN: off.length };
   });

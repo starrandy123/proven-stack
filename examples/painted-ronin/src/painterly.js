@@ -75,7 +75,7 @@ void main() {
 
 // Heckel's FinalFragmentShader (quantised tone toward dark and light, saturation, ACES) with our canvas weave for the paper,
 // tuned gentler for a lit 3D world (his quantisation of 16 steps and saturation 1.5 were tuned for a single object on white)
-const FINAL = `uniform sampler2D inputBuffer; uniform vec4 resolution; uniform float time; uniform float strength; varying vec2 vUv;
+const FINAL = `uniform sampler2D inputBuffer; uniform sampler2D sceneBuffer; uniform vec4 resolution; uniform float time; uniform float strength; varying vec2 vUv;
 vec3 ACESFilm(vec3 x) { float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
 vec3 sat(vec3 rgb, float k) { vec3 i = vec3(dot(rgb, vec3(0.2125, 0.7154, 0.0721))); return mix(i, rgb, k); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -88,6 +88,9 @@ float canvas(vec2 px) {               // a linen weave: two crossing threads, un
 }
 void main() {
   vec3 color = texture2D(inputBuffer, vUv).rgb;
+  // painterly pixel art (vfx.js, the ink cut's beats): the ink's own pixels are flagged with alpha 0.5 in the scene and taken from it at
+  // full resolution, so the oil pass never rounds them into a smudge; the grade and the canvas below still paint them like the rest
+  vec4 ink = texture2D(sceneBuffer, vUv); if (abs(ink.a - 0.5) < 0.12) color = ink.rgb;
   float g = dot(color, vec3(0.299, 0.587, 0.114));
   float n = 10.0; float qn = clamp(floor(g * (n - 1.0) + 0.5) / (n - 1.0), 0.15, 0.85);
   vec3 q = qn < 0.5 ? mix(vec3(0.08, 0.07, 0.09), color, qn * 2.0) : mix(color, vec3(1.0, 0.97, 0.9), (qn - 0.5) * 2.0);
@@ -101,7 +104,8 @@ void main() {
 
 export class PainterlyPass extends Pass {
   // scale: the filter's resolution against the screen (0.5 on a phone); radiusNear/radiusFar: the brush in texels near and far
-  constructor(camera, { scale = 0.6, targetHeight = 0, radiusNear = 2, radiusFar = 6, strength = 1 } = {}) {
+  // inkPixels: the ink's flagged pixels taken from the scene at full resolution (plant nopixel: false, the oil pass rounds them like the rest)
+  constructor(camera, { scale = 0.6, targetHeight = 0, radiusNear = 2, radiusFar = 6, strength = 1, inkPixels = true } = {}) {
     super('PainterlyPass');
     this.targetHeight = targetHeight;
     this.needsDepthTexture = true;
@@ -113,8 +117,8 @@ export class PainterlyPass extends Pass {
     this.kuwaharaMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: KUWAHARA, depthTest: false, depthWrite: false, uniforms: {
       tensorBuffer: { value: null }, originalTexture: { value: null }, depthBuffer: { value: null }, resolution: { value: new THREE.Vector4() },
       radiusNear: { value: radiusNear }, radiusFar: { value: radiusFar }, cameraNear: { value: 0.1 }, cameraFar: { value: 1000 }, useDepth: { value: 0 } } });
-    this.finalMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FINAL, depthTest: false, depthWrite: false,
-      uniforms: { inputBuffer: { value: null }, resolution: { value: new THREE.Vector4() }, time: { value: 0 }, strength: { value: strength } } });
+    this.finalMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: inkPixels ? FINAL : FINAL.replace('if (abs(ink.a - 0.5) < 0.12) color = ink.rgb;', ''), depthTest: false, depthWrite: false,
+      uniforms: { inputBuffer: { value: null }, sceneBuffer: { value: null }, resolution: { value: new THREE.Vector4() }, time: { value: 0 }, strength: { value: strength } } });
     this.fullscreenMaterial = this.finalMat;
   }
   setDepthTexture(depthTexture) { this.kuwaharaMat.uniforms.depthBuffer.value = depthTexture; this.kuwaharaMat.uniforms.useDepth.value = depthTexture ? 1 : 0; }
@@ -141,7 +145,7 @@ export class PainterlyPass extends Pass {
     k.tensorBuffer.value = this.tensorRT.texture; k.originalTexture.value = inputBuffer.texture;
     k.cameraNear.value = this.cameraRef.near; k.cameraFar.value = this.cameraRef.far;
     this.draw(renderer, this.kuwaharaMat, this.paintRT);
-    this.finalMat.uniforms.inputBuffer.value = this.paintRT.texture; this.finalMat.uniforms.strength.value = this.strength;
+    this.finalMat.uniforms.inputBuffer.value = this.paintRT.texture; this.finalMat.uniforms.sceneBuffer.value = inputBuffer.texture; this.finalMat.uniforms.strength.value = this.strength;
     this.draw(renderer, this.finalMat, this.renderToScreen ? null : outputBuffer);
   }
   dispose() { for (const t of [this.tensorRT, this.blurRT, this.paintRT]) t.dispose(); for (const m of [this.tensorMat, this.blurMat, this.kuwaharaMat, this.finalMat]) m.dispose(); super.dispose(); }

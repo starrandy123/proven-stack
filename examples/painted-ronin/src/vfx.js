@@ -281,41 +281,114 @@ export function createVfx(scene, { phone = false, plant = null, land = null } = 
   // flecks that land as stains, and the blade flicked clean. Here they are painted in this game's one language: the one atlas, the palette.
   const clock = { t: 0, u: { value: 0 } };                             // the game's own clock (it holds in the hit-stop, slows in slow motion)
 
-  // 1 · THE INK BLOT AT CONTACT: a shock frame (Sakuga Booru: "Special frames drawn by animators that appear for a split second, often added
-  // to make an impact more pronounced"), splashed ink behind the wound (Sesshū's hatsuboku, 1495). Its mass is MyPaint's ragged `puff_b` in
-  // ink, its 12 splats small `puff_a` dabs standing off the rim at 1.13-1.48 rims (Worthington: the rim's jets split into drops). It runs on the game's clock, so
-  // it holds through the hit-stop, as the ink cut's act holds its blot through its freeze. Rim: the act's ratio, about 1.1× his height. It
-  // is drawn over the world and BEHIND the fighters (the act's drawBack): after the world's opaque pass and before the characters
-  // (renderOrder 2, main.js), with no depth test, writing its own depth half a metre behind the wound, so what lies beyond stays hidden.
-  // Plants: noblot (none), blotfront (drawn over the fighters too).
-  const BLOT = { life: 0.07, k: 1.1, span: 3.2, mass: 2.2 };              // seconds; rim ÷ his height; the card and the mass, in rims
+  // 1 · THE INK SPLASH AT CONTACT: a shock frame (Sakuga Booru: "Special frames drawn by animators that appear for a split second, often
+  // added to make an impact more pronounced"), drawn behind the wound as INK FLICKED ALONG THE CUT. The owner, 8 Nov, on the first take: "It
+  // just looks like black smudge so we must show better brush strokes … making sure it looks pixelly but painted as well". So, from the
+  // references (research §8): splatter made "by forcefully flicking the brush toward the paper" scatters outward "depending on the flicking
+  // angle" (Lei et al., Pacific Graphics 2013), so the splash is directional: a pooled core blotted into the paper (nijimi, "A blotting
+  // effect"), brush flicks fanned along the stroke's travel as the camera sees it, each the atlas's kabura sumi stroke with its loaded start
+  // at the wound and its split dry tail (kasure, "A running out of ink effect") at the tip, and droplets strung past the tips. Tones from the
+  // palette by the bristles' own value (ink, stoneShade, a smoke wash; crimson and maple flicks where it wounds, more on a kill). PAINTERLY
+  // PIXEL ART (Bionic Bay's "slightly smaller pixels than usual and a broader range of color tones"; Shadowglass's "pixel stabilization" and
+  // "Fewer colors means more cohesion"): with inkPix > 0 every fragment takes the value at the centre of its SCREEN cell, tones step through a
+  // 4×4 ordered dither, and the pixels are flagged (alpha 0.5) so the oil pass keeps them crisp (painterly.js). It runs on the game's clock,
+  // so it holds through the hit-stop, as the ink cut's act holds its blot. It is drawn over the world and BEHIND the fighters (the act's
+  // drawBack): after the world's opaque pass, before the characters (renderOrder 2, main.js), without a depth test, writing its own depth
+  // half a metre behind the wound. Plants: noblot (none), blotfront (drawn over the fighters), paperoff (the stroke never bares the paper),
+  // smudge (one flat round blot of ink, the first take's "black smudge"), flatstart (the strokes' straight starts, below), rimoff (inkTile).
+  const BLOT = { life: 0.07, span: 3.2 };                              // seconds; the card's width in his heights (the flicks reach ~1.3)
+  const inkPix = { value: 0 };                                          // the pixel cell in device px (0: painted, no grid)
+  const INK_GLSL = /* glsl */`
+uniform float inkPix;
+// the uv at the centre of this fragment's SCREEN cell: every fragment of a cell takes one value (pixel stabilization)
+vec2 cellUv(vec2 uv) { if (inkPix < 1.0) return uv; vec2 c = (floor(gl_FragCoord.xy / inkPix) + 0.5) * inkPix - gl_FragCoord.xy; return uv + dFdx(uv) * c.x + dFdy(uv) * c.y; }
+float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
+float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+// the ordered dither's threshold for this cell (0.5 everywhere when painted)
+float dith() { return inkPix < 1.0 ? 0.5 : bayer4(floor(gl_FragCoord.xy / inkPix)); }
+float inkAlpha() { return inkPix < 1.0 ? 1.0 : 0.5; }
+// a mark never shows the edge of the tile it is taken from (the owner, 9 Nov: "One corner looks too square and shart … And rectangle I
+// mean"). The bake painted the oil dab and the puff reaching their tiles' borders, which cut them straight (measured in the atlas: puff_a's
+// left side, dab_oil's right end), so ink taken from them is ERODED toward the tile's rim, the way the smoke erodes (Trümpler): coverage
+// pulled down from 0.78 of the tile's half-width out to 0.96, so a cut side turns round inside the tile. Plant rimoff: not eroded.
+vec4 inkTile(vec2 uv, vec4 r) { if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) return vec4(0.0); vec4 s = paintTile(uv, r); s.a *=${plant === 'rimoff' ? '1.0' : '1.0 - smoothstep(0.78, 0.96, length(uv - 0.5) * 2.0)'}; return s; }`;
   const blotMat = new THREE.ShaderMaterial({ transparent: plant === 'blotfront', depthTest: false, depthWrite: plant !== 'blotfront', side: THREE.DoubleSide,
-    uniforms: { ...atlasUniforms(), massRect: { value: rect('puff_b') }, splatRect: { value: rect('puff_a') }, inkC: { value: col('ink') }, spin: { value: 0 },
-      splats: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) } },
+    uniforms: { ...atlasUniforms(), inkPix, flickRect: { value: rect('stroke_ink') }, dotRect: { value: rect('puff_a') },
+      inkC: { value: col('ink') }, midC: { value: col('stoneShade') }, washC: { value: col('stoneShade') }, crimsonC: { value: col('crimson') }, mapleC: { value: col('maple') },
+      flicks: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, drops: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform vec4 massRect; uniform vec4 splatRect; uniform vec3 inkC; uniform float spin; uniform vec4 splats[12]; varying vec2 vUv; ${PAINT_GLSL}
-      vec2 turn(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+    // flicks[i]: x its angle, y its bend (a flick bends as it flies), z its length, w its width (negative: crimson), all in his heights.
+    // 0-3: the core, short wide presses whose loaded starts overlap into the pooled ink; 4-12 the flicks fanned along the cut; 13-15 back.
+    // THE PRESS (9 Nov, his note on the two looks: "One corner looks too square and shart … And rectangle I mean"): the atlas's kabura
+    // stroke starts in a straight cut, because the bake laid its first dab 41 px inside the tile at a radius of ~101 px (the preset's
+    // pressure curve at 0.95), and the tile's edge cut the rest off. MyPaint's dab is round (classic_kabura: elliptical_dab_ratio 1.0, "1.0
+    // means a perfectly round dab", libmypaint's brushsettings), and a brush stroke begins in its press with the tip hidden ("the first and
+    // last touches of the brush tip on the paper should be hidden", art-virtue's Basic Brush Techniques). So each stroke here starts in
+    // that dab, whole: a disc of the stroke's own half-width at its start (0.42 of it across), round in the card's plane whatever the
+    // stroke's length, its rim at the wound. The pale bleed (nijimi) is the stroke's outline grown 1.25× across at the press, closing onto
+    // the stroke over a quarter of his height, and round around the press. It meets the stroke with no gap. The old bleed was a band from
+    // |v| 0.5, started on the same straight cut. At 1.6× the press's halo read as a white disc behind him, and in the smoke swatch even
+    // a rim read as a white outline on the grass (looked at, 9 Nov), so it is a rim in the mid ink tone: diluted ink, darker than its ground. Plant flatstart: the old straight start and banded bleed.
+    fragmentShader: `uniform vec4 flickRect; uniform vec4 dotRect; uniform vec3 inkC; uniform vec3 midC; uniform vec3 washC; uniform vec3 crimsonC; uniform vec3 mapleC;
+      uniform vec4 flicks[16]; uniform vec4 drops[12]; varying vec2 vUv; ${PAINT_GLSL} ${INK_GLSL}
       vec4 tile(vec2 u, vec4 r) { return (u.x > 0.0 && u.y > 0.0 && u.x < 1.0 && u.y < 1.0) ? paintTile(u, r) : vec4(0.0); }
       void main(){
-        vec2 q = (vUv - 0.5) * ${BLOT.span.toFixed(2)};                                         // in rim radii from the wound
-        vec4 m = tile(turn(q, spin) / ${BLOT.mass.toFixed(2)} + 0.5, massRect);
-        vec4 s = vec4(0.0);                                                                   // 12 splats standing off the rim
-        for (int i = 0; i < 12; i++) { vec2 d = q - splats[i].xy; if (dot(d, d) < splats[i].z * splats[i].z * 1.5) { vec4 t = tile(turn(d, splats[i].w) / (2.2 * splats[i].z) + 0.5, splatRect); if (t.a > s.a) s = t; } }
-        float a = max(m.a, s.a); if (a < 0.42) discard;
-        gl_FragColor = vec4(inkC * (1.0 + 0.55 * ((m.a >= s.a ? m.r : s.r) - 0.62)), 1.0);
+        vec2 q = (cellUv(vUv) - 0.5) * ${BLOT.span.toFixed(2)};                                  // in his heights from the wound
+        ${plant === 'smudge' ? 'if (length(q) > 0.5) discard; gl_FragColor = vec4(inkC, inkAlpha()); return;   // plant smudge: the flat round blot he called a smudge' : ''}
+        float cov = 0.0, val = 0.6, red = 0.0, wash = 0.0;
+        for (int i = 0; i < 16; i++) {                                                         // each stroke: loaded at the wound, split and dry at its tip
+          vec4 f = flicks[i]; if (f.z <= 0.0) continue;
+          float w = abs(f.w), rp = ${plant === 'flatstart' ? '0.0' : '0.42'} * w, rb = rp / 0.8;     // the press's radius and the bleed's around it
+          vec2 d = vec2(cos(f.x), sin(f.x)); float a = dot(q, d), u = a / f.z;                // a: along the stroke from the wound
+          if (u > 1.0 || a < rp - rb - 0.06 * w) continue;
+          float v = (d.x * q.y - d.y * q.x - f.y * u * u * f.z) / w;                          // across, in its widths
+          float e = length(vec2(a - rp, v * w));                                               // from the press's centre
+          float disc = rp > 0.0 ? 1.0 - smoothstep(rp - 0.05 * w, rp + 0.05 * w, e) : 0.0;
+          float body = a >= rp ? tile(vec2(u, v + 0.5), flickRect).a : 0.0;
+          float c = max(body, disc);
+          if (a - rp < 0.25) {                                                                 // the bleed, within its reach
+            float k = mix(0.8, 1.0, smoothstep(0.0, 0.25, a - rp));
+            float grown = a >= rp ? tile(vec2(u, v * k + 0.5), flickRect).a : 0.0;
+            wash = max(wash, max(grown, rp > 0.0 ? 1.0 - smoothstep(rb - 0.05 * w, rb + 0.05 * w, e) : 0.0));
+          }
+          if (c > cov) { cov = c; val = paintTile(vec2(clamp(u, 0.0, 1.0), v + 0.5), flickRect).r; red = f.w < 0.0 ? 1.0 : 0.0; }
+        }
+        for (int i = 0; i < 12; i++) {                                                         // droplets strung past the tips
+          vec4 p = drops[i]; if (p.z <= 0.0) continue; vec2 e = q - p.xy; if (dot(e, e) > p.z * p.z * 1.6) continue;
+          vec4 s = inkTile(e / (2.2 * p.z) + 0.5, dotRect); if (s.a > cov) { cov = s.a; val = s.r; red = p.w; }
+        }
+        float t = dith();
+        if (cov < 0.42) { if (wash < 0.45 + 0.35 * t) discard; gl_FragColor = vec4(washC, inkAlpha()); return; }
+        // the bristles' own light and dark as palette tones: black ink, with the palest bristles in the mid tone as dry-brush streaks
+        float k = smoothstep(0.7, 0.95, val);
+        vec3 dark = red > 0.5 ? crimsonC : inkC, light = red > 0.5 ? mapleC : midC;
+        gl_FragColor = vec4(inkPix < 1.0 ? mix(dark, light, k) : (k > t ? light : dark), inkAlpha());
       }` });
   const blot = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), blotMat);
   blot.name = 'ink-blot'; blot.userData.painted = 'blot'; blot.renderOrder = plant === 'blotfront' ? 9 : 1; blot.frustumCulled = false; blot.visible = false; scene.add(blot);
   const blotState = { t: -1, arc: null, at: new THREE.Vector3(), r: 0, height: 0, level: 0, count: 0 };
   const paperOn = (a, v) => { if (a && a.m.material.uniforms.paper) a.m.material.uniforms.paper.value = v; };
-  function contact(at, height, level, arc, camera) {                    // a cut that wounds (1) or kills (2)
+  const _cr = new THREE.Vector3(), _cu = new THREE.Vector3(), R1 = (a, b) => a + Math.random() * (b - a);
+  function contact(at, height, level, arc, camera, travel = null) {    // a cut that wounds (1) or kills (2), flung along the stroke's travel
     if (level < 1 || plant === 'noblot') return;
-    const r = BLOT.k * height;
-    Object.assign(blotState, { t: 0, fresh: true, r, height, level, count: blotState.count + 1 }); blotState.at.copy(at);
+    Object.assign(blotState, { t: 0, fresh: true, r: height, height, level, count: blotState.count + 1 }); blotState.at.copy(at);
     blot.position.copy(at).addScaledVector(at.clone().sub(camera.position).normalize(), 0.5);
-    blot.quaternion.copy(camera.quaternion); blot.scale.setScalar(r * BLOT.span);
-    blotMat.uniforms.spin.value = Math.random() * Math.PI * 2; blot.visible = true;
-    for (const v of blotMat.uniforms.splats.value) { const a = Math.random() * Math.PI * 2, d = 1.13 + 0.35 * Math.random(); v.set(Math.cos(a) * d, Math.sin(a) * d, 0.04 + 0.08 * Math.random(), Math.random() * 6.28); }   // _ink.js: r · (1.13 … 1.48), 1.5-5.5 px of a 46-65 px rim
+    blot.quaternion.copy(camera.quaternion); blot.scale.setScalar(height * BLOT.span);
+    // the flick's angle in the card's plane: the stroke's travel as the camera sees it (its right and up)
+    _cr.set(1, 0, 0).applyQuaternion(camera.quaternion); _cu.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    const tx = travel ? travel.dot(_cr) : 0, ty = travel ? travel.dot(_cu) : 0, th = Math.hypot(tx, ty) > 0.2 ? Math.atan2(ty, tx) : Math.random() * Math.PI * 2;
+    const U = blotMat.uniforms, nRed = level >= 2 ? 6 : 3, F = U.flicks.value;
+    for (let i = 0; i < 4; i++) F[i].set(Math.random() * Math.PI * 2, R1(-0.2, 0.2), R1(0.24, 0.36), R1(0.26, 0.36));   // the core
+    for (let i = 4; i < 13; i++) {                                                // the flicks, fanned along the cut, the longest down its line
+      const off = THREE.MathUtils.clamp((Math.random() + Math.random() + Math.random() - 1.5) * 0.65, -0.95, 0.95);
+      F[i].set(th + off, R1(-0.28, 0.28), R1(0.6, 1.15) * (1 - 0.3 * Math.abs(off)), (i - 4 < nRed ? -1 : 1) * R1(0.13, 0.21));
+    }
+    for (let i = 13; i < 16; i++) F[i].set(th + Math.PI + R1(-0.75, 0.75), R1(-0.2, 0.2), R1(0.26, 0.45), R1(0.1, 0.14));   // a few thrown back
+    U.drops.value.forEach((p, j) => {                                             // droplets strung past the flicks' tips
+      const f = F[4 + (j % 9)], d = f.z * R1(1.05, 1.35) + R1(0, 0.1), a = f.x + R1(-0.1, 0.1) + f.y * 0.5;
+      p.set(Math.cos(a) * d, Math.sin(a) * d, R1(0.025, 0.06), Math.random() < (level >= 2 ? 0.6 : 0.3) ? 1 : 0);
+    });
+    blot.visible = true;
     if (blotState.arc !== arc) paperOn(blotState.arc, 0);
     blotState.arc = arc; paperOn(arc, plant === 'paperoff' ? 0 : 1);   // plant paperoff: the stroke never bares the paper
   }
@@ -344,7 +417,7 @@ export function createVfx(scene, { phone = false, plant = null, land = null } = 
   for (const [k, arr, n] of [['iPos', dPos, 3], ['iVel', dVel, 3], ['iSize', dSize, 1], ['iTone', dTone, 1]]) dropGeo.setAttribute(k, new THREE.InstancedBufferAttribute(arr, n).setUsage(THREE.DynamicDrawUsage));
   dropGeo.instanceCount = 0;
   const dropMat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
-    uniforms: { ...atlasUniforms(), dabRect: { value: rect('dab_oil') }, inkC: { value: col('ink') }, crimsonC: { value: col('crimson') } },
+    uniforms: { ...atlasUniforms(), inkPix, dabRect: { value: rect('dab_oil') }, inkC: { value: col('ink') }, crimsonC: { value: col('crimson') }, midC: { value: col('stoneShade') }, mapleC: { value: col('maple') } },
     vertexShader: `attribute vec3 iPos; attribute vec3 iVel; attribute float iSize; attribute float iTone; varying vec2 vUv; varying float vTone;
       void main(){
         vUv = uv; vTone = iTone;
@@ -354,8 +427,10 @@ export function createVfx(scene, { phone = false, plant = null, land = null } = 
         c.xy += (position.x * d * stretch + position.y * vec2(-d.y, d.x)) * iSize;
         gl_Position = projectionMatrix * c;
       }`,
-    fragmentShader: `uniform vec4 dabRect; uniform vec3 inkC; uniform vec3 crimsonC; varying vec2 vUv; varying float vTone; ${PAINT_GLSL}
-      void main(){ vec4 p = paintTile(vUv, dabRect); if (p.a < 0.35) discard; gl_FragColor = vec4(mix(inkC, crimsonC, vTone) * (1.0 + 0.55 * (p.r - 0.62)), 1.0); }` });
+    fragmentShader: `uniform vec4 dabRect; uniform vec3 inkC; uniform vec3 crimsonC; uniform vec3 midC; uniform vec3 mapleC; varying vec2 vUv; varying float vTone; ${PAINT_GLSL} ${INK_GLSL}
+      void main(){ vec4 p = inkTile(cellUv(vUv), dabRect); if (p.a < 0.35) discard;
+        float k = smoothstep(0.55, 0.85, p.r), t = dith(); vec3 dark = vTone > 0.5 ? crimsonC : inkC, light = vTone > 0.5 ? mapleC : midC;
+        gl_FragColor = vec4(inkPix < 1.0 ? mix(dark, light, k * 0.6) : (k > t ? light : dark), inkAlpha()); }` });
   const dropMesh = new THREE.Mesh(dropGeo, dropMat); dropMesh.name = 'ink-drops'; dropMesh.userData.painted = 'drops'; dropMesh.frustumCulled = false; dropMesh.visible = false; scene.add(dropMesh);
 
   const STAINS = 96, SV = 36;                                          // stain slots (a ring) × vertices a stain may take
@@ -364,17 +439,19 @@ export function createVfx(scene, { phone = false, plant = null, land = null } = 
   stainGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3).setUsage(THREE.DynamicDrawUsage));
   stainGeo.setAttribute('uv', new THREE.BufferAttribute(sUv, 2).setUsage(THREE.DynamicDrawUsage));
   stainGeo.setAttribute('aInfo', new THREE.BufferAttribute(sInfo, 4).setUsage(THREE.DynamicDrawUsage));   // landed, dries from, gone at, crimson
-  const stainMat = new THREE.ShaderMaterial({ transparent: true, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
-    uniforms: { ...atlasUniforms(), stampRect: { value: rect('dab_oil') }, inkC: { value: col('ink') }, crimsonC: { value: col('crimson') }, uTime: clock.u },
+  // opaque (each pixel is ink or nothing), so painterly pixel art's flag is written as is; depth and offset as webgl_decals' material
+  const stainMat = new THREE.ShaderMaterial({ transparent: false, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
+    uniforms: { ...atlasUniforms(), inkPix, stampRect: { value: rect('dab_oil') }, inkC: { value: col('ink') }, crimsonC: { value: col('crimson') }, midC: { value: col('stoneShade') }, mapleC: { value: col('maple') }, uTime: clock.u },
     vertexShader: 'attribute vec4 aInfo; varying vec2 vUv; varying vec4 vInfo; void main(){ vUv = uv; vInfo = aInfo; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform vec4 stampRect; uniform vec3 inkC; uniform vec3 crimsonC; uniform float uTime; varying vec2 vUv; varying vec4 vInfo; ${PAINT_GLSL}
+    fragmentShader: `uniform vec4 stampRect; uniform vec3 inkC; uniform vec3 crimsonC; uniform vec3 midC; uniform vec3 mapleC; uniform float uTime; varying vec2 vUv; varying vec4 vInfo; ${PAINT_GLSL} ${INK_GLSL}
       void main(){
         if (uTime >= vInfo.z) discard;
-        vec4 p = paintTile(vUv, stampRect);
+        vec4 p = inkTile(cellUv(vUv), stampRect);
         float dry = clamp((uTime - vInfo.y) / max(vInfo.z - vInfo.y, 1e-3), 0.0, 1.0);
         float ink = p.a * (0.7 + 0.6 * (p.r - 0.62));                                  // the thin, pale bristles carry the least ink
         if (ink < mix(0.3, 1.05, dry)) discard;                                         // dried away by erosion, never a fade (Trümpler)
-        gl_FragColor = vec4(mix(inkC, crimsonC, vInfo.w) * (1.0 + 0.55 * (p.r - 0.62)), 1.0);
+        float k = smoothstep(0.55, 0.85, p.r), t = dith(); vec3 dark = vInfo.w > 0.5 ? crimsonC : inkC, light = vInfo.w > 0.5 ? mapleC : midC;
+        gl_FragColor = vec4(inkPix < 1.0 ? mix(dark, light, k * 0.6) : (k > t ? light : dark), inkAlpha());
       }` });
   const stainMesh = new THREE.Mesh(stainGeo, stainMat); stainMesh.name = 'ink-stains'; stainMesh.userData.painted = 'stains'; stainMesh.frustumCulled = false; stainMesh.renderOrder = 3; scene.add(stainMesh);
   const cells = new THREE.Mesh(new THREE.BufferGeometry());            // the terrain cells under a stain, 3 × 3 samples, drawn as terrainMesh draws them
@@ -444,7 +521,7 @@ export function createVfx(scene, { phone = false, plant = null, land = null } = 
 
   const api = {
     batch, hit, fire, trailUpdate, stroke, strokeUpdate, slashArc, arcUpdate, pressArc, pressStroke, lockMark, enso, clipdata: null, leaves, smokes, pools, strokes, arcs, trail,
-    contact, wound, castOff, blot, blotState, BLOT, drops, dropMesh, stainMesh, stainLog, woundLog, clock, cells,
+    contact, wound, castOff, blot, blotState, BLOT, inkPix, drops, dropMesh, stainMesh, stainLog, woundLog, clock, cells,
     update(dt, playerPos, camera) {
       leaves.emitter.position.set(playerPos.x, playerPos.y + 10, playerPos.z); batch.update(dt); arcUpdate(dt);
       clock.t += dt; clock.u.value = clock.t; dropsUpdate(dt); blotUpdate(dt, camera);

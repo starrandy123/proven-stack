@@ -27,6 +27,9 @@ const PLANT = Q.get('plant');                                               // t
 // ?rate=0.5: the game's whole clock at half speed, for filming a beat slowed by the game itself, never by stretching the video (the
 // standard reel: "slowed by the game's own clock, never the video's")
 const RATE = Math.min(1, Math.max(0.05, +(Q.get('rate') || 1)));
+// the ink's painterly pixel art (vfx.js): its cell in px at a 900 px tall screen, scaled with the drawing buffer; 0 paints it without a grid.
+// 4 by default: the owner, 8 Nov, "making sure it looks pixelly but painted as well" (look B of the two he was sent); ?inkpix=0 is look A
+const INK_PIX = Q.has('inkpix') ? +Q.get('inkpix') : 4;
 const PHONE = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
 const root = document.getElementById('game');
 const hud = { ki: document.getElementById('ki-fill'), hp: document.getElementById('hp-fill'), kills: document.getElementById('kills'), msg: document.getElementById('msg'), help: document.getElementById('help') };
@@ -82,6 +85,8 @@ const env = await buildEnvironment(scene, land, P, { plant: PLANT });
 // fixed in the world would swim over a body that walks through them — Meier's shower door)
 for (const o of scene.children) if (!before.has(o)) o.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh) for (const mm of [].concat(m.material)) if (mm.isMeshStandardMaterial && !mm.userData.paint) paintSurface(mm, { region: 'field_a', scale: 0.6, strength: 0.3, band: 0 }); });
 const vfx = createVfx(scene, { phone: PHONE, plant: PLANT, land });
+const inkCell = () => { const h = renderer.getDrawingBufferSize(new THREE.Vector2()).y; vfx.inkPix.value = INK_PIX > 0 ? Math.max(2, Math.round(INK_PIX * h / 900)) : 0; };
+inkCell();
 const birds = createBirds(scene, land, { flocks: PHONE ? 2 : 3, perFlock: PHONE ? 10 : 14, plant: PLANT });
 // the clouds: Sea of Thieves' painted mass (clouds_painted.js); the old billboard puffs only as the planted defect the walls must catch
 const clouds = PLANT === 'sprites' ? createClouds(scene, { count: PHONE ? 10 : 16, phone: PHONE }) : createPaintedClouds(scene, { count: PHONE ? 12 : 22, phone: PHONE, sunDir, plant: PLANT, targetHeight: PLANT === 'bigclouds' ? 4000 : 280,
@@ -114,7 +119,7 @@ const TOTAL = bandits.list.length;
 
 const composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
 composer.addPass(new RenderPass(scene, camera));
-const painterly = new PainterlyPass(camera, { targetHeight: 560, radiusNear: 2, radiusFar: 6 });
+const painterly = new PainterlyPass(camera, { targetHeight: 560, radiusNear: 2, radiusFar: 6, inkPixels: PLANT !== 'nopixel' });   // plant nopixel: the oil pass rounds the ink's pixels
 composer.addPass(painterly);
 if (Q.has('raw')) painterly.enabled = false;
 
@@ -500,7 +505,7 @@ function frame(now) {
         vfx.hit(at, dir, true);
         // the ink cut's beats (vfx.js): the blot behind him and the stroke bare paper for the instant, the drops flung along the stroke's
         // own travel (the tip's velocity at contact, off its clip), and the blade now wet for the chiburi
-        vfx.contact(at, b.standH, b.dead ? 2 : 1, st.arc, camera); vfx.wound(at, tipTravel(s.clip, C.frame), b.dead ? 2 : 1); blood = { t: time };
+        { const tr = tipTravel(s.clip, C.frame); vfx.contact(at, b.standH, b.dead ? 2 : 1, st.arc, camera, tr); vfx.wound(at, tr, b.dead ? 2 : 1); blood = { t: time }; }
         freeze = s.power > 1 || b.dead ? 0.11 : 0.07; trauma = Math.min(1, trauma + (s.power > 1 ? 0.45 : 0.28));
       }
     }
@@ -560,7 +565,7 @@ function memory() {
 }
 
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  const s = renderer.getDrawingBufferSize(new THREE.Vector2()); skyPaint.setResolution(s.x, s.y); if (clouds.setSize) clouds.setSize(s.x, s.y); });
+  const s = renderer.getDrawingBufferSize(new THREE.Vector2()); skyPaint.setResolution(s.x, s.y); if (clouds.setSize) clouds.setSize(s.x, s.y); inkCell(); });
 window.__GAME = { THREE, scene, camera, renderer, player, land, P, cam, grass, painterly, ronin, kit, bandits, navs, env, pc, rest, vfx, strike, anatomicalBends, dashSpecial, stormSpecial, clipdata, COMBO, DASH_STRIKE, LEAP_STRIKE, lock, LOCK_RANGE, birds, clouds, sky, skyPaint, paint, PALETTE, RAMP, WIND, sunDir,
   get facing() { return facing; }, set facing(v) { facing = v; },
   CHIBURI, tipTravel, GRID: { N, SPACING }, get blood() { return blood; }, get still() { return still; }, get hold() { return hold; }, get time() { return time; } };

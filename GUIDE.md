@@ -189,6 +189,20 @@ language. The references were read before any code (the receipts' `2026-11-09_pi
 *Found on the way:* `vfx.js` already had a local `N` (the trail's 14), which shadowed the terrain's `N`, so every stain projected onto the
 grid's corner and came out empty. The blot first counted the contact frame's own time slice, so WebKit showed a kill's blot for 0.056 s.
 
+**Round 2 (8-9 Nov): brush strokes, pixelly but painted.** His note on the first clip: "It just looks like black smudge so we must show
+better brush strokes … making sure it looks pixelly but painted as well". The round blot became a SPLASH FLICKED ALONG THE CUT (Lei et al.,
+Pacific Graphics 2013: splatter scatters "depending on the flicking angle"). A pooled core of four short kabura presses, nine flicks fanned
+along the stroke's travel as the camera sees it, three thrown back, droplets strung past the tips, in the palette's ink, mid tone, crimson
+and maple. **Painterly pixel art** is the default (`?inkpix=0` paints it without the grid). Every ink fragment takes its screen cell's value
+(Shadowglass's "pixel stabilization") and steps through a 4×4 ordered dither. Each pixel is flagged with alpha 0.5, so the oil pass's final
+step takes the ink from the full-resolution scene and never rounds it into a smudge (Bionic Bay's "painterly pixel art").
+Then his note on the two looks: "One corner looks too square and shart … And rectangle I mean". The atlas's kabura stroke starts on a
+straight cut, because the bake laid its first dab 41 px inside the tile at a radius of ~101 px. MyPaint's dab is round (`classic_kabura`:
+`elliptical_dab_ratio` 1.0, "a perfectly round dab"), and a brush stroke begins in its press with the tip hidden. So each splash stroke now
+starts in that dab, whole, and its bleed (nijimi) is a rim of the mid ink tone around it with no gap. The drops, the stains and the
+droplets sample their tiles through `inkTile`, eroded toward the rim, because the bake left the dab and the puff cut by their tiles' borders
+too. The shared tiles were not re-baked: the banners and the heavy slash draw the same stroke.
+
 ## 9. The walls (`examples/painted-ronin/tests/walls.mjs`, `tests/paint.mjs`)
 Each wall is a measurement of the running game, in Chromium and in WebKit, proven red by a planted defect:
 
@@ -206,10 +220,13 @@ Each wall is a measurement of the running game, in Chromium and in WebKit, prove
 | W14 the guard | a bandit facing the ronin with his guard up blocks a sideways cut | `guardpush`: judged from the push, never blocked |
 | W15 the chain | a press made after a clash chains into the next cut | `dropchain`: the press dropped |
 | W12 the press | a cut that wounds ≥ 1.6× a cut in the air, one that kills ≥ 2.6× and lingers ≥ 1.2 s; 閃's ink ≥ 1.8× over a death | `nopress`: all 0.133 m |
-| W16 the blot | a cut that wounds or kills shows an ink blot behind the fighters for 0.07 s of game time (held through the hit-stop), reaching about his height, the stroke bare paper meanwhile; none on a miss or a block | `noblot` · `blotfront`: his own pixels change · `paperoff`: the stroke 0.35 light |
+| W16 the blot | a cut that wounds or kills shows its ink splash behind the fighters for 0.07 s of game time (held through the hit-stop), its ink flung 0.6-1.8× his height from the wound, the stroke bare paper meanwhile; none on a miss or a block | `noblot` · `blotfront`: his own pixels change · `paperoff`: the stroke 0.35 light |
 | W17 the flecks | a wound flings 9 drops along the stroke (4 crimson) and 3 back, a kill 14 (10 crimson); each lands as a stain on the terrain's own triangles and dries away by 2.35 s; none on a miss | `nostains` · `floatstains`: 0.25 m up · `nodry` · `missflecks` |
 | W18 the chiburi | standing after a wound, Sword_Regular_A_Rec flicks 4 crimson drops off the real tip ~1.25 s after the cut, landing in a line, each stain stretched by 1/sin α; no flick after a miss | `nochiburi` · `chiburimiss` |
 | W19 the crimson | the stroke's own pixels: no crimson in the air, crimson along the inner side of a wound, flooded on a kill | `misscrimson`: 0.45 crimson in the air |
+| W20 no square corners | each of a wound's and a kill's 16 splash strokes, drawn alone, starts in a round press (just past its start ≤ 0.75 of its widest, with its bleed and its ink alone; read 0.52-0.57); no droplet, flying drop or stain draws on its tile's outer 3 %; in both looks | `flatstart`: 0.997-1 · `rimoff`: thousands of pixels on the rims |
+| W21 brush strokes | the splash is strokes, not a smudge: its outline ≥ 4× a disc's (read 15-27×), ≥ 2 palette tones each ≥ 3 % (read 4), ≥ 1.5× longer along the cut than across (read 2.1-3.2); both looks | `smudge`: 0.81-1.18×, 1 tone, 1× |
+| W22 pixel art | after the oil pass, in the final picture read off the canvas in the splash's own frame, ≥ 85 % of its cells that meet another tone are one value (read 100 %) | `nopixel`: 29-32 % |
 
 The painted language has its own walls (`tests/paint.mjs`), measured on the materials the game builds and the pixels it draws:
 
