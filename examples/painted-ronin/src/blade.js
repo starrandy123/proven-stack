@@ -130,15 +130,21 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   // (the bristles' value, G, as every stroke here reads it), laid over what it cuts, 0.06 m wide (ours, from 0.035), drawn as the finger
   // draws it (C9). Plant bmthinline: the old line.
   const LINE_W = PL === 'bmthinline' ? 0.035 : 0.06;
+  // THE LINE LIES UNDER THE FIGHTERS (the owner, 9 Nov, on take 6: "The line should not go over the character"). It is drawn as the ink
+  // cut's blot is (vfx.js: "over the world and BEHIND the fighters"): in the opaque pass, after the world and before every fighter
+  // (renderOrder 2 on every mesh of the ronin and the bandits, main.js), with no depth test so the mat it crosses never hides it, and no
+  // blending (three.js draws every opaque mesh before any transparent one, so a blended line could only ever lie over him): its bristles cut
+  // it out (discard), as the blot's ink is cut — the bristles ×3, cut at 25 %: the atlas stroke is a dry brush, mostly faint, and a cut at
+  // 35 % of ×1.6 left 2.6 px of a half-drawn line (C9). It fades by its bristles too: the thinnest drop out first. Plant lineover: the line over him.
   const inkLine = () => PL === 'bmthinline'
     ? new THREE.MeshBasicMaterial({ map: strokeTex, alphaMap: strokeTex, color: col('crimson'), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, opacity: 0 })
-    : new THREE.ShaderMaterial({ transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+    : new THREE.ShaderMaterial({ transparent: PL === 'lineover', depthTest: false, depthWrite: false, side: THREE.DoubleSide,
       uniforms: { map: { value: strokeTex }, uvT: { value: strokeTex.matrix }, color: { value: col('crimson') }, on: { value: 0 } },
       vertexShader: 'uniform mat3 uvT; varying vec2 vUv; void main(){ vUv = (uvT * vec3(uv, 1.0)).xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform sampler2D map; uniform vec3 color; uniform float on; varying vec2 vUv; void main(){ float a = clamp(texture2D(map, vUv).g * 1.6, 0.0, 1.0) * on; if (a < 0.02) discard; gl_FragColor = vec4(color, a); }' });
+      fragmentShader: 'uniform sampler2D map; uniform vec3 color; uniform float on; varying vec2 vUv; void main(){ float a = clamp(texture2D(map, vUv).g * 3.0, 0.0, 1.0); if (a < mix(1.01, 0.25, on)) discard; gl_FragColor = vec4(color, 1.0); }' });
   const setOn = (m, v) => { if (m.uniforms) m.uniforms.on.value = v; else m.opacity = v; };
   const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), inkLine());
-  line.name = 'brush-line'; line.userData.painted = 'stroke'; line.renderOrder = 6; line.frustumCulled = false; line.visible = false; scene.add(line);
+  line.name = 'brush-line'; line.userData.painted = 'stroke'; line.renderOrder = PL === 'lineover' ? 9 : 1; line.frustumCulled = false; line.visible = false; scene.add(line);
 
   // ── the bits a cut throws: straw and splinters, painted from the atlas's flecks in the body's swatches, on the world's clock ──
   const BITS = 96, bitGeo = new THREE.InstancedBufferGeometry().copy(new THREE.PlaneGeometry(1, 1));

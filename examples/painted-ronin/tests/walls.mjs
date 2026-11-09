@@ -899,19 +899,25 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
     const R = G.renderer, gl = R.getContext(), sz = R.getDrawingBufferSize(new T.Vector2()), W = sz.x, H = sz.y, dpr = R.getPixelRatio(), rt = new T.WebGLRenderTarget(W, H);
     const read = () => { const f = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, f); return f; };
     const alone = () => { const keep = R.getRenderTarget(); R.setRenderTarget(rt); R.clear(); R.render(G.scene, G.camera); const s = new Uint8Array(W * H * 4); R.readRenderTargetPixels(rt, 0, 0, W, H, s); R.setRenderTarget(keep); return s; };
-    const { a, b } = await frame(() => { const a = { f: read(), s: alone() }; G.scene.remove(B.line); G.composer.render(0); const b = { f: read(), s: alone() }; G.scene.add(B.line); G.composer.render(0); return { a, b }; });
+    // ...and once more with him hidden, the line's OWN footprint (C9: since the owner's "The line should not go over the character" it lies
+    // under him, and on an upright phone he covers most of a half-drawn line; how far it is drawn is the line's, not what he leaves of it)
+    const { a, b, c, d } = await frame(() => { const a = { f: read(), s: alone() }; G.scene.remove(B.line); G.composer.render(0); const b = { f: read(), s: alone() };
+      G.ronin.root.visible = false; G.composer.render(0); const d = { f: read() }; G.scene.add(B.line); G.composer.render(0); const c = { f: read() };
+      G.ronin.root.visible = true; G.composer.render(0); return { a, b, c, d }; });
     rt.dispose();
     // the cut line on the screen (device px, rows from the bottom as read): its axis through the aim, for the drawn extent along it
     const P = (v) => { const q = v.clone().project(G.camera); return [(q.x + 1) / 2 * W, (q.y + 1) / 2 * H]; };
     const [cx, cy] = P(B.S.aim), [dx, dy] = P(B.S.aim.clone().addScaledVector(B.S.dir, 0.5)), l = Math.hypot(dx - cx, dy - cy) || 1, ux = (dx - cx) / l, uy = (dy - cy) / l;
     const red = (p, i) => p[i] > 90 && p[i] > 1.6 * p[i + 1] && p[i] > 1.6 * p[i + 2];
     const moved = (p, q, i) => Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]) > 36;
-    let nf = 0, ns = 0, lo = 1e9, hi = -1e9;
+    let nf = 0, ns = 0, lo = 1e9, hi = -1e9, flo = 1e9, fhi = -1e9;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4;
       if (moved(a.f, b.f, i) && red(a.f, i)) { nf++; const t = (x - cx) * ux + (y - cy) * uy; if (t < lo) lo = t; if (t > hi) hi = t; }
-      if (moved(a.s, b.s, i) && red(a.s, i)) ns++; }
+      if (moved(a.s, b.s, i) && red(a.s, i)) ns++;
+      if (moved(c.f, d.f, i) && red(c.f, i)) { const t = (x - cx) * ux + (y - cy) * uy; if (t < flo) flo = t; if (t > fhi) fhi = t; } }
     const len = nf ? (hi - lo) / dpr : 0;
-    return { final: nf, scene: ns, kept: ns ? +(nf / ns).toFixed(3) : null, len: +len.toFixed(1), wide: len > 0 ? +(nf / dpr / dpr / len).toFixed(2) : 0, W, H, dpr,
+    const footLen = fhi > flo ? (fhi - flo) / dpr : 0;
+    return { footLen: +footLen.toFixed(1), final: nf, scene: ns, kept: ns ? +(nf / ns).toFixed(3) : null, len: +len.toFixed(1), wide: len > 0 ? +(nf / dpr / dpr / len).toFixed(2) : 0, W, H, dpr,
       draw: B.S.draw ? { t0: +B.S.draw.t0.toFixed(3), t1: +B.S.draw.t1.toFixed(3), mode: B.S.draw.mode } : null, mesh: +B.line.scale.x.toFixed(3) }; }
   // the plane through points: the least eigenvector of their covariance (Jacobi's rotations on the symmetric 3x3), and how far they stray
   function planeFit(P) {
@@ -925,7 +931,21 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
     let m = 0; for (let i = 1; i < 3; i++) if (A[i][i] < A[m][m]) m = i;
     const n = new T.Vector3(V[0][m], V[1][m], V[2][m]).normalize();
     return { n, rms: Math.sqrt(P.reduce((s, p) => s + n.dot(p.clone().sub(c)) ** 2, 0) / P.length) }; }
-  window.__CW = { frame, touch, linePixels, planeFit }; })()`;
+  // C11: does the line lie over him? One frame drawn four times in the scene alone (no oil pass to smear an edge): as it is, without the
+  // line, without the ronin, without both. His pixels: where hiding him changes the picture; the line's own footprint where he is hidden:
+  // where taking the line out changes it then. Where that footprint crosses him, any pixel the line still changes is the line over him.
+  async function overHim() {
+    const R = G.renderer, sz = R.getDrawingBufferSize(new T.Vector2()), W = sz.x, H = sz.y, rt = new T.WebGLRenderTarget(W, H), him = G.ronin.root;
+    const alone = () => { const keep = R.getRenderTarget(); R.setRenderTarget(rt); R.clear(); R.render(G.scene, G.camera); const s = new Uint8Array(W * H * 4); R.readRenderTargetPixels(rt, 0, 0, W, H, s); R.setRenderTarget(keep); return s; };
+    const shots = await frame(() => { const A = alone(); G.scene.remove(B.line); const Bn = alone(); him.visible = false; const D = alone(); G.scene.add(B.line); const C = alone(); him.visible = true; return { A, Bn, C, D }; });
+    rt.dispose();
+    const diff = (p, q, i) => Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]) > 24;
+    let his = 0, foot = 0, cross = 0, over = 0;
+    // his pixels from the two frames WITHOUT the line (taken with the line in, they were blind to him exactly where it covered him)
+    for (let i = 0; i < W * H * 4; i += 4) { const h = diff(shots.Bn, shots.D, i), f = diff(shots.C, shots.D, i); if (h) his++; if (f) foot++; if (h && f) { cross++; if (diff(shots.A, shots.Bn, i)) over++; } }
+    return { his, foot, cross, over };
+  }
+  window.__CW = { frame, touch, linePixels, planeFit, overHim }; })()`;
 
 {
   // ── the phone, upright and turned: the line as it is drawn (C7, C9); --only Cline runs this page alone ──
@@ -948,13 +968,13 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
       touch('touchend', x1, y1); await wait(400); B.close(); await wait(300);
       return { half, end };
     });
-    const e = m.end, hv = m.half, ratio = e.len > 0 ? hv.len / e.len : null;
+    const e = m.end, hv = m.half, ratio = e.footLen > 0 ? hv.footLen / e.footLen : null;
     // the verdict is the final picture's; the scene alone is said beside it (it names the pass if one ever eats the line), never judged:
     // the grade keeps crimson that the scene alone blends below the crimson test, so its count can fall to a pixel while the line reads
     wall(`C7 the line seen, ${w}×${h}`, !errors.length && e.wide >= C7_WIDE,
       `the stroke's own crimson: ${e.final} px in the final picture over ${e.len} CSS px of its length, ${e.wide} CSS px across on average (≥ ${C7_WIDE}); the scene alone drew ${e.scene} px of clear crimson${e.kept === null ? '' : ' (the final holds ' + Math.round(100 * e.kept) + ' % of it)'}`);
     if (w < h) wall('C9 drawn as drawn', !errors.length && ratio !== null && Math.abs(ratio - 0.5) <= 0.15,
-      `halfway through the drag the line is ${hv.len} CSS px long, at its end ${e.len}: ${ratio === null ? 'NO LINE' : ratio.toFixed(2)} of it (0.5 ± 0.15) [drawn t0..t1 m: half ${JSON.stringify(hv.draw)} mesh ${hv.mesh} · end ${JSON.stringify(e.draw)} mesh ${e.mesh}]`);
+      `halfway through the drag the line is ${hv.footLen} CSS px long, at its end ${e.footLen} (its own footprint, him hidden; seen past him ${hv.len} and ${e.len}): ${ratio === null ? 'NO LINE' : ratio.toFixed(2)} of it (0.5 ± 0.15) [drawn t0..t1 m: half ${JSON.stringify(hv.draw)} mesh ${hv.mesh} · end ${JSON.stringify(e.draw)} mesh ${e.mesh}]`);
     if (errors.length) console.log('  page errors:', errors.slice(0, 3).join(' | '));
     await ctx.close();
   }
@@ -979,6 +999,16 @@ const CW = `(() => { const { G, T, B, wait, raf } = window.__BW;
       B.close(); await wait(600); return rows;
     });
     console.log('  C4 calibration — the turn each clip needs, by the drawn angle:\n    ' + cal.join('\n    '));
+    // C11 the line lies under him (the owner on take 6: "The line should not go over the character"): the rising line of take 6's stand,
+    // which crosses his shoulders from the brush's camera; where it crosses him, not one of his pixels is the line's
+    const ov = await page.evaluate(async () => {
+      const { G, B, wait, raf, stage } = window.__BW, { overHim } = window.__CW;
+      await stage(2); for (let k = 0; k < 30 && !B.active; k++) { B.open(G.me); if (!B.active) await wait(100); }
+      await wait(500); B.S.theta = -0.8; await raf(); await raf(); await wait(400);
+      const m = await overHim(); B.close(); await wait(700); return m;
+    });
+    wall('C11 the line lies under him', !errors.length && ov.cross >= 50 && ov.over <= 0.01 * ov.cross,
+      `his ${ov.his} px, the line's own ${ov.foot} px, ${ov.cross} px where it crosses him (≥ 50, or the wall saw nothing); the line drawn over him on ${ov.over} of them (≤ 1 %)`);
     // C10's reference: the same four wind-ups with the alignment planted off — the clip's own chest against its own pelvis
     const refs = await (async () => { const rp = await open('test&plant=chnoalign'); await rp.page.evaluate(BW);
       const q = await rp.page.evaluate(async () => { const { G, T, B, wait, raf, stage } = window.__BW, bn = G.ronin.bones, o = [];
