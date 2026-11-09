@@ -27,11 +27,14 @@ function steer(goal, near) {
   keys(on && fw > 0.38, on && fw < -0.38, on && rt < -0.38, on && rt > 0.38);
   return on ? d : 0;
 }
-// a stroke across a bandit's chest, as a hand draws it: the cursor where it starts, the button down, six moves along the stroke, up
+// a stroke across a bandit's chest, as a hand draws it: the cursor where it starts, the button down, six moves along the stroke, up. Each
+// in its own diagonal (the owner on chain take 2: "the slashes should change in diagonal directions too"): '/' at ~27°, '\' at 45°, a
+// steep '/' at ~55°, so each cut is its own (kesa, gyaku-kesa, kesa) and his body and the shot turn to each
+const STROKES = [[25, -12.7], [21, 21], [15, -21.5]];
 function strokeStart(b) {
-  const ch = b.root.position.clone(); ch.y += 1.25; const q = ch.project(G.camera), x = (q.x + 1) / 2 * innerWidth, y = (1 - q.y) / 2 * innerHeight;
-  G.input.setCursor(x - 75, y + 38); cv.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
-  S.drag = { n: 0 }; S.log.push(`    a stroke across bandit ${S.k + 1} at ${Math.round(x)}, ${Math.round(y)}`);
+  const ch = b.root.position.clone(); ch.y += 1.25; const q = ch.project(G.camera), x = (q.x + 1) / 2 * innerWidth, y = (1 - q.y) / 2 * innerHeight, [dx, dy] = STROKES[S.k];
+  G.input.setCursor(x - 3 * dx, y - 3 * dy); cv.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+  S.drag = { n: 0, dx, dy }; S.log.push(`    a stroke across bandit ${S.k + 1} at ${Math.round(x)}, ${Math.round(y)}, ${(Math.atan2(-dy, dx) * 57.3).toFixed(0)}°`);
 }
 window.__film = (t) => {
   switch (S.beat) {
@@ -43,13 +46,13 @@ window.__film = (t) => {
     case 'three strokes, three marks':
       if (S.wait > 0) { S.wait--; break; }
       if (!S.drag) { if (S.k < 3) strokeStart(three[S.k]); break; }
-      if (S.drag.n < 6) { window.dispatchEvent(new MouseEvent('mousemove', { movementX: 25, movementY: -12.7 })); S.drag.n++; break; }
+      if (S.drag.n < 6) { window.dispatchEvent(new MouseEvent('mousemove', { movementX: S.drag.dx, movementY: S.drag.dy })); S.drag.n++; break; }
       window.dispatchEvent(new MouseEvent('mouseup', { button: 0 })); S.drag = null; S.k++; S.wait = 4;
       S.log.push(`    marks now ${B.marks.count}, ink ${B.S.ink.toFixed(2)}`);
       if (S.k >= 3) go('the ink spent: the chain', t); break;
     case 'the ink spent: the chain': {
       const ch = G.chainOf(); if (ch) S.began = true;
-      if (ch && ch.log.length !== S.seen) { S.seen = ch.log.length; const e = ch.log[ch.log.length - 1]; S.log.push(`${t.toFixed(2)}   ${e.kind} ${e.k !== undefined ? e.k + 1 : ''}${e.dead !== undefined ? (e.dead ? ' (falls)' : ' (STANDS)') : ''}`); }
+      if (ch && ch.log.length !== S.seen) { S.seen = ch.log.length; const e = ch.log[ch.log.length - 1]; S.log.push(`${t.toFixed(2)}   ${e.kind} ${e.k !== undefined ? e.k + 1 : ''}${e.dead !== undefined ? (e.dead ? ' (cut down)' : ' (MISSED)') : ''}`); }
       if (S.began && !ch) go('time returns', t);
       if (!S.began && t - S.at > 2) { S.log.push('    NO CHAIN (marks ' + B.marks.count + ', brush ' + (B.active ? 'open' : 'closed') + ')'); go('time returns', t); }
       break; }

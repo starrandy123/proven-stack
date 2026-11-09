@@ -414,6 +414,8 @@ function chainStep(realDt) {
     window.__chainLog = chain.log; (window.__chainLogs = window.__chainLogs || []).push(chain.log);   // every chain's log (a second one is read, not hidden)
   }
   brush.S.camTaken = !!chain;                                            // the brush lets the camera go while the chain holds it
+  brush.S.holdWash = !!chain && PLANT !== 'chcolor';                     // black and white through the chain (plant chcolor: the colour back at the close)
+  { const m = chain && chain.list[chain.k]; brush.S.focusAt = m && chain.phase !== 'fall' ? m.b.root.position.clone().add(new THREE.Vector3(0, 1.25, 0)) : null; }
   let want = 1;
   if (chain) {
     chain.t += realDt;
@@ -433,12 +435,19 @@ function chainStep(realDt) {
       // the cut runs THROUGH its impact before the beat holds the world (ended on the blow's registration, 0.05 s of strike time before it,
       // the beat froze the blade short of him and the next dash took it away: C3 read 1 of 3 impacts)
       if (!st || !st.def.takedown || st.t > st.impact + 0.06) {
-        chain.log.push({ kind: 'taken', k: chain.k, b: m.b, dead: m.b.dead, at: time }); brush.marks.drop(m.b); align.letGo();
-        chain.phase = chain.k + 1 < chain.list.length ? 'beat' : 'last'; chain.t = 0;
+        chain.log.push({ kind: 'taken', k: chain.k, b: m.b, dead: m.b.dead || !!m.b.cutDown, at: time }); align.letGo();
+        chain.phase = chain.k + 1 < chain.list.length ? 'beat' : 'fall'; chain.t = 0;
       }
     } else if (chain.phase === 'beat') { if (chain.t >= CHAIN_RUN.beat) { chain.k++; chain.phase = 'go'; } }
-    else if (chain.phase === 'last') { if (chain.t >= 0.3) chain.k = chain.list.length; }
-    if (chain) want = chain.phase === 'beat' ? CHAIN_RUN.held : CHAIN_RUN.slow;
+    else if (chain.phase === 'fall') {
+      // the last one cut: the slow motion stops and every man cut down falls, together, by the game's own death; the wash a beat longer
+      if (!chain.fallen) { chain.fallen = true;
+        for (const it of chain.list) { const b = it.b; if (!b.cutDown) continue; const cd = b.cutDown; b.cutDown = null; if (b.mixer) b.mixer.timeScale = 1;
+          if (PLANT !== 'chspare') b.hp = 1; bandits.hit(b, cd.dir, 1, { breaksGuard: true, from: cd.from }); brush.marks.drop(b); }
+        chain.log.push({ kind: 'fall', at: time }); }
+      if (chain.t >= 1.2) chain.k = chain.list.length;
+    }
+    if (chain) want = chain.phase === 'beat' ? CHAIN_RUN.held : chain.phase === 'fall' ? 1 : CHAIN_RUN.slow;
   }
   chainScale += (want - chainScale) * (1 - Math.exp(-realDt / CHAIN_RUN.tau)); if (want === 1 && Math.abs(chainScale - 1) < 1e-3) chainScale = 1;
 }
@@ -602,18 +611,27 @@ function frame(now) {
         st.hit = true;
         const out = new THREE.Vector3().subVectors(bp, pos).setY(0).normalize();
         const dir = swing.clone().multiplyScalar(0.65).addScaledVector(out, 0.35).normalize();      // thrown along the cut, and away
-        if (s.takedown && b === st.target && PLANT !== 'chspare') b.hp = Math.min(b.hp, s.power);   // a takedown: his life brought to the blow (a front cut of 1: his death clip, then the ragdoll)
-        const r = bandits.hit(b, dir, s.power, { breaksGuard: s.power > 1 || !!s.takedown, from: pos });
-        if (PLANT === 'chgore' && s.takedown && b.dead) { let cut = false; b.root.traverse((o) => { if (!cut && o.isMesh) { o.visible = false; cut = true; } }); }   // plant: a piece of him gone
+        // THE CHAIN'S CUT LEAVES HIM STANDING (the owner on chain take 2: "when we kill all of them, the slow mo stops and they all fall"): cut
+        // down, he holds where he stands, frozen, his mark on him, until the last cut; then they all fall together (chainStep's fall). Plant
+        // chfallnow: each falls at his own cut, as take 2 had it.
+        let r;
+        if (s.takedown && b === st.target && chain && PLANT !== 'chfallnow') {
+          b.cutDown = { dir: dir.clone(), from: pos.clone() }; b.state = 'hold'; if (b.agent) b.agent.resetMoveTarget(); if (b.mixer) b.mixer.timeScale = 0; r = 'cut';
+        } else {
+          if (s.takedown && b === st.target && PLANT !== 'chspare') b.hp = Math.min(b.hp, s.power);   // a takedown: his life brought to the blow
+          r = bandits.hit(b, dir, s.power, { breaksGuard: s.power > 1 || !!s.takedown, from: pos });
+        }
+        const fatal = b.dead || !!b.cutDown;
+        if (PLANT === 'chgore' && s.takedown && fatal) { let cut = false; b.root.traverse((o) => { if (!cut && o.isMesh) { o.visible = false; cut = true; } }); }   // plant: a piece of him gone
         const at = new THREE.Vector3(closest.x, THREE.MathUtils.clamp(closest.y, bp.y + 0.6, bp.y + 1.7), closest.z);
         if (r === 'blocked') { sfx('clash'); vfx.hit(at, out.clone().negate(), false); freeze = 0.05; trauma = Math.min(1, trauma + 0.2); pc.queued = false; continue; }
         st.landed = true; sfx('cut'); pc.ki = Math.min(100, pc.ki + 12);
-        vfx.pressArc(st.arc, b.dead ? 2 : 1);                                // the brush presses into a wound, hardest on a death
+        vfx.pressArc(st.arc, fatal ? 2 : 1);                                // the brush presses into a wound, hardest on a death
         vfx.hit(at, dir, true);
         // the ink cut's beats (vfx.js): the blot behind him and the stroke bare paper for the instant, the drops flung along the stroke's
         // own travel (the tip's velocity at contact, off its clip), and the blade now wet for the chiburi
-        { const tr = tipTravel(s.clip, C.frame); vfx.contact(at, b.standH, b.dead ? 2 : 1, st.arc, camera, tr); vfx.wound(at, tr, b.dead ? 2 : 1); blood = { t: time }; }
-        freeze = s.power > 1 || b.dead ? 0.11 : 0.07; trauma = Math.min(1, trauma + (s.power > 1 ? 0.45 : 0.28));
+        { const tr = tipTravel(s.clip, C.frame); vfx.contact(at, b.standH, fatal ? 2 : 1, st.arc, camera, tr); vfx.wound(at, tr, fatal ? 2 : 1); blood = { t: time }; }
+        freeze = s.power > 1 || fatal ? 0.11 : 0.07; trauma = Math.min(1, trauma + (s.power > 1 ? 0.45 : 0.28));
       }
     }
   }
@@ -651,7 +669,7 @@ function frame(now) {
 
   sun.position.copy(pos).addScaledVector(sunDir, 120); sun.target.position.copy(pos);
   grass.update(worldReal, camera, pos);
-  setHush(brush.look);
+  setHush(brush.wash);                                                   // the hush holds with the wash
   updateAudio(realDt, { speed: Math.hypot(vx, vz), danger: bandits.list.some((b) => !b.dead && b.state !== 'idle') ? 1 : 0 });
   hud.hp.style.width = Math.max(0, pc.hp) + '%'; hud.ki.style.width = pc.ki + '%'; document.body.classList.toggle('ki-50', pc.ki >= 50); document.body.classList.toggle('ki-100', pc.ki >= 100); document.body.classList.toggle('slowmo', slow > 0); hud.kills.textContent = `斬 ${pc.kills} / ${TOTAL}`;
   if (clouds.render) { camera.updateMatrixWorld(); clouds.render(renderer, camera); }        // the clouds' mass into its buffer, before the frame

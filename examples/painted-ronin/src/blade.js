@@ -245,7 +245,7 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
   const S = { open: false, toggled: false, pressedAt: 0, ink: BRUSH.pots, ts: 1, look: 0, focus: null, aim: new THREE.Vector3(), theta: 0.55, cut: cutOf(0.55),
     screenNew: null, aimY: null, n: new THREE.Vector3(0, 1, 0), o: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0), toAim: new THREE.Vector3(0, 0, 1),
     swing: null, freeze: 0, real: 0, pose: null, saved: null, linger: 0, lens: 0, cutThisTime: false,
-    draw: { t0: -1.2, t1: -1.2, mode: 'auto' } };                     // the line as drawn: metres from the aim along it, start and end
+    draw: { t0: -1.2, t1: -1.2, mode: 'auto' }, washHeld: 0, holdWash: false, focusAt: null };                     // the line as drawn: metres from the aim along it, start and end
   // a screen point laid onto the cut line as the screen shows it: metres from the aim along S.dir (C9: the line is drawn as the finger draws)
   function alongLine(sx, sy) {
     const a = S.aim.clone().project(camera), b = S.aim.clone().addScaledVector(S.dir, 0.5).project(camera);
@@ -481,8 +481,12 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
     if (S.look === 0 && S.linger <= 0 && S.lens < 1e-3 && S.saved) { if (PL !== 'bmcamstuck') { if (!S.camTaken) { cam.dist = S.saved.dist; cam.pitch = S.saved.pitch; } if (camera.fov !== baseFov) { camera.fov = baseFov; camera.updateProjectionMatrix(); } } S.saved = null; }
     // the look: the ink wash, the painter's focus, the sheet and the line, the crimson lines on what it will cut
     const L = S.look;
-    painterly.brush.wash.value = PL === 'bmnowash' ? 0 : L; painterly.brush.flash.value = PL === 'bmnowash' ? 0 : S.flash;
-    painterly.brush.focusAmt.value = L; if (S.focus) painterly.brush.focusDepth.value = camera.position.distanceTo(S.aim);
+    // the ink wash HOLDS through the chain (the owner on chain take 2: "it should stay black and white"): main.js holds S.holdWash while the
+    // chain runs, to the falls and a beat after; the painter's focus sits on the bandit being taken (S.focusAt)
+    S.washHeld += ((S.holdWash ? 1 : 0) - S.washHeld) * (1 - Math.exp(-realDt / (S.holdWash ? 0.025 : 0.25))); if (!S.holdWash && S.washHeld < 1e-3) S.washHeld = 0;
+    const W = Math.max(L, S.washHeld);
+    painterly.brush.wash.value = PL === 'bmnowash' ? 0 : W; painterly.brush.flash.value = PL === 'bmnowash' ? 0 : S.flash;
+    painterly.brush.focusAmt.value = W; if (S.focusAt && !S.open) painterly.brush.focusDepth.value = camera.position.distanceTo(S.focusAt); else if (S.focus) painterly.brush.focusDepth.value = camera.position.distanceTo(S.aim);
     sheet.visible = line.visible = L > 0.01; sheet.material.uniforms.opacity.value = 0.13 * L; setOn(line.material, 0.95 * L); lineU.bmOn.value = S.focus ? L : 0;
     if (L > 0.01) {                                                     // the drawn part of the line, its pressed start where the stroke began
       const D = S.draw, len = Math.max(0.04, Math.abs(D.t1 - D.t0)), x = S.dir.clone().multiplyScalar(D.t1 >= D.t0 ? 1 : -1);
@@ -558,7 +562,7 @@ export async function createBrush({ scene, P, land, camera, cam, ronin, vfx, sfx
 
   return {
     BRUSH, CUTS, S, stands, pieces, events, sheet, line, lineU, materials: M, bits, clock, align, inkLine, marks,
-    get active() { return S.open; }, get timeScale() { return S.ts; }, get look() { return S.look; }, get framing() { return S.look > 0 || S.linger > 0; },
+    get active() { return S.open; }, get timeScale() { return S.ts; }, get look() { return S.look; }, get wash() { return Math.max(S.look, S.washHeld); }, get framing() { return S.look > 0 || S.linger > 0; },
     get holdsBody() { return S.open || !!S.swing; }, get selfClock() { return S.open || !!S.swing; }, selfDt: (realDt) => (S.freeze > 0 ? 0 : realDt),
     frame, afterAnimate, sync, frameTarget, open, close, release, cutOf, aimPlane, volumeOf,
   };

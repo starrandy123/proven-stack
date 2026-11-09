@@ -1096,7 +1096,7 @@ if (want('C') || want('Cchain')) {
     const marked = B.marks.marks.map((m) => three.indexOf(m.b)), spent = +(ink0 - B.S.ink).toFixed(2);
     const other = G.bandits.alive().find((b) => !three.includes(b)), fourth = other ? B.marks.add(other, 0.3) : 'no fourth bandit';
     // the chain, read every frame until it has ended 1.2 s
-    const t0 = performance.now(), hits = [], scale = []; let started = null, ended = null, prev = null, worstStep = 0, worstTurn = 0;
+    const t0 = performance.now(), hits = [], scale = [], deadAt = [null, null, null]; let started = null, ended = null, prev = null, worstStep = 0, worstTurn = 0, fallAt = null;
     while (performance.now() - t0 < 30000) {
       const t = (await raf() - t0) / 1000, ch = G.chainOf(), st = G.pc.strike;
       if (ch && started === null) started = t;
@@ -1105,7 +1105,8 @@ if (want('C') || want('Cchain')) {
         hits.push({ who: three.indexOf(st.target), axis: +Math.hypot(tip.x - tp.x, tip.z - tp.z).toFixed(2), h: +(tip.y - tp.y).toFixed(2), dead: st.target.dead }); }
       const cp = G.camera.position.clone(), cq = G.camera.quaternion.clone();
       if (prev && started !== null) { worstStep = Math.max(worstStep, cp.distanceTo(prev.p)); worstTurn = Math.max(worstTurn, 2 * Math.acos(Math.min(1, Math.abs(cq.dot(prev.q)))) * 57.3); }
-      prev = { p: cp, q: cq }; scale.push({ t, s: G.chainScale, ph: ch ? ch.phase : null });
+      prev = { p: cp, q: cq }; scale.push({ t, s: G.chainScale, ph: ch ? ch.phase : null, w: B.wash });
+      if (ch && ch.phase === 'fall' && fallAt === null) fallAt = t; three.forEach((b, i) => { if (b.dead && deadAt[i] === null) deadAt[i] = t; });
       if (started !== null && !ch && ended === null) ended = t;
       if (ended !== null && t > ended + 1.2) break;
     }
@@ -1114,7 +1115,10 @@ if (want('C') || want('Cchain')) {
     const taken = (window.__chainLog || []).filter((e) => e.kind === 'taken').map((e) => three.indexOf(e.b));
     const inCut = scale.filter((x) => (x.ph === 'cut' || x.ph === 'dash') && started !== null && x.t > started + 0.3).map((x) => x.s);
     const inBeat = scale.filter((x) => x.ph === 'beat').map((x) => x.s), back = ended === null ? null : scale.find((x) => x.t > ended && x.s >= 0.99);
-    return { chainLog, marksLeft: B.marks.count, diag, near: G.bandits.alive().filter((b) => b.root.position.distanceTo(G.me.pos) < 12).map((b) => [three.indexOf(b), +b.root.position.distanceTo(G.me.pos).toFixed(1)]), error: null, marked, spent, fourth, started, ended, hits, taken, whole: three.map((b, i) => vis(b) === whole0[i]),
+    // C13: the wash through the chain (from 0.2 s after it starts to 0.5 s past the fall), and let go within 2 s of its end
+    const held = started === null || fallAt === null ? [] : scale.filter((x) => x.t > started + 0.2 && x.t < fallAt + 0.5).map((x) => x.w);
+    const washGone = ended === null ? null : scale.find((x) => x.t > ended && x.w < 0.05);
+    return { washMin: held.length ? +Math.min(...held).toFixed(3) : null, washGone: washGone ? +(washGone.t - ended).toFixed(2) : null, fallAt, deadAt: deadAt.map((x) => (x === null ? null : +x.toFixed(2))), allDead: three.every((b) => b.dead), chainLog, marksLeft: B.marks.count, diag, near: G.bandits.alive().filter((b) => b.root.position.distanceTo(G.me.pos) < 12).map((b) => [three.indexOf(b), +b.root.position.distanceTo(G.me.pos).toFixed(1)]), error: null, marked, spent, fourth, started, ended, hits, taken, whole: three.map((b, i) => vis(b) === whole0[i]),
       slowMax: inCut.length ? +Math.max(...inCut).toFixed(3) : null, beatMin: inBeat.length ? +Math.min(...inBeat).toFixed(3) : null, backAfter: back ? +(back.t - ended).toFixed(2) : null,
       worstStep: +worstStep.toFixed(3), worstTurn: +worstTurn.toFixed(1), camBack: { dist: +Math.abs(G.cam.dist - follow.dist).toFixed(3), pitch: +(Math.abs(G.cam.pitch - follow.pitch) * 57.3).toFixed(2) } };
   });
@@ -1125,8 +1129,15 @@ if (want('C') || want('Cchain')) {
     wall('C1 marks', !errors.length && r.marked.length === 3 && new Set(r.marked).size === 3 && Math.abs(r.spent - 3) < 0.05 && r.fourth === 'full',
       `three strokes across three bandits: marked ${JSON.stringify(r.marked)} (three, each once), ${r.spent} pots spent (3); a fourth mark while three are held: ${r.fourth} ('full')`);
     wall('C2 the order', !errors.length && r.taken.length === 3 && JSON.stringify(r.taken) === JSON.stringify(r.marked), `taken ${JSON.stringify(r.taken)} against marked ${JSON.stringify(r.marked)}`);
-    wall('C3 each lands', !errors.length && r.hits.length === 3 && r.hits.every((h) => h.dead && h.axis <= 0.6 && h.h >= 0.45 && h.h <= 1.85),
-      r.hits.map((h) => `#${h.who}: ${h.dead ? 'dead' : 'STANDING'}, the real tip ${h.axis} m off his axis (≤ 0.6), ${h.h} m up (0.45-1.85)`).join(' · ') + ` (${r.hits.length} of 3 landed)`);
+    wall('C3 each lands', !errors.length && r.hits.length === 3 && r.hits.every((h) => h.axis <= 0.6 && h.h >= 0.45 && h.h <= 1.85) && r.allDead,
+      r.hits.map((h) => `#${h.who}: the real tip ${h.axis} m off his axis (≤ 0.6), ${h.h} m up (0.45-1.85)`).join(' · ') + ` (${r.hits.length} of 3 landed); after the chain ${r.allDead ? 'all three dead' : 'NOT ALL DEAD'}`);
+    // C12 they fall together (the owner on chain take 2: "when we kill all of them, the slow mo stops and they all fall"): none dies before
+    // the fall begins, every one within 0.2 s of it
+    wall('C12 they fall together', !errors.length && r.fallAt !== null && r.deadAt.every((x) => x !== null && x >= r.fallAt - 0.02 && x <= r.fallAt + 0.2),
+      `the fall at ${r.fallAt === null ? 'NEVER' : r.fallAt.toFixed(2) + ' s'}; each died at ${JSON.stringify(r.deadAt)} s (none before it, all within 0.2 s)`);
+    // C13 black and white through the chain (his word: "it should stay black and white")
+    wall('C13 black and white', !errors.length && r.washMin !== null && r.washMin >= 0.95 && r.washGone !== null && r.washGone <= 2,
+      `the ink wash through the chain at least ${r.washMin} (≥ 0.95, from its start to 0.5 s past the fall); gone ${r.washGone} s after its end (≤ 2)`);
     wall('C5 time', !errors.length && r.slowMax !== null && r.slowMax <= 0.5 && r.beatMin !== null && r.beatMin <= 0.08 && r.backAfter !== null && r.backAfter <= 0.6,
       `slow through the takedowns: the world at most ${r.slowMax} (≤ 0.5); held in the beats: down to ${r.beatMin} (≤ 0.08); back to 1 ${r.backAfter} s after the last (≤ 0.6)`);
     wall('C6 the camera', !errors.length && r.worstStep <= 0.6 && r.worstTurn <= 12 && r.camBack.dist <= 0.05 && r.camBack.pitch <= 0.5,

@@ -38,7 +38,7 @@ export class Bandits {
       }
     }
   }
-  alive() { return this.list.filter((b) => !b.dead); }
+  alive() { return this.list.filter((b) => !b.dead && !b.cutDown); }      // a man cut down in the chain stands frozen until all fall: he is not standing
   impacts(clip) { return (this.clipdata[clip] && this.clipdata[clip].hits) || [0.25]; }
 
   // ── the blow from the player ── power 1 (a cut), 2 (the finisher, a dash), 3 (a special); dir: where it pushes
