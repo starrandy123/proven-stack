@@ -1,0 +1,2 @@
+The vendored libraries under examples/*/vendor/ and the assets under examples/*/assets/ are NOT covered by this
+licence: each keeps its own, written beside it (vendor/*/LICENSE.txt) and listed in the example's rights.json.

@@ -32,8 +32,8 @@ its guide (`GUIDE.md`: how it was built, step by step, with what went wrong).
 
 People call AI games slop when the agent writes every system itself: knees that bend backwards, enemies that walk through walls,
 particles that look like a tech demo. The shipped games solved those systems already, and their libraries are open:
-- **Jolt Physics** — "Used by Horizon Forbidden West and Death Stranding 2"; Godot 4.6 made it the default 3D physics.
-- **Recast & Detour** — "Recast powers AI navigation features in Unity, Unreal, Godot, O3DE and countless AAA and indie games".
+- **Jolt Physics** — "Used by Horizon Forbidden West and Death Stranding 2" ([its README](https://github.com/jrouwe/JoltPhysics)); Godot 4.6 made it the default 3D physics.
+- **Recast & Detour** — "Recast powers AI navigation features in Unity, Unreal, Godot, O3DE and countless AAA and indie games" ([its README](https://github.com/recastnavigation/recastnavigation)).
 - **three.js** draws it; **three.quarks** fills the air; **postprocessing** (pmndrs) grades it; **howler** and **ZzFX** sound it.
 
 It pairs with `gamedev-skills/awesome-gamedev-agent-skills` (the craft: game feel, levels, cameras): that repo teaches design and names
